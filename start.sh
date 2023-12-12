@@ -16,8 +16,6 @@ chmod +x $Server_Dir/bin/*
 chmod +x $Server_Dir/scripts/*
 chmod +x $Server_Dir/tools/subconverter/subconverter
 
-
-
 #################### 变量设置 ####################
 
 Conf_Dir="$Server_Dir/conf"
@@ -94,8 +92,11 @@ unset HTTPS_PROXY
 unset NO_PROXY
 
 # create logs folder
-mkdir logs
-
+if [ -d $Server_Dir"/logs" ]; then
+	echo "logs folder exists."
+else
+	mkdir logs
+fi
 
 ## Clash 订阅地址检测及配置文件下载
 # 检查url是否有效
