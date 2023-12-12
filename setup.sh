@@ -1,32 +1,29 @@
 #!/bin/bash
 
-echo -e "Run this with root permission!\n"
+Server_Dir=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
+fish_func_path=$Server_Dir/scripts/functions.fish
+bash_func_path=$Server_Dir/scripts/functions.bash
 
-# 添加环境变量(root权限)
-cat>/etc/profile.d/clash.fish<<EOF
-# 开启系统代理
-function proxy_on
-	export http_proxy=http://127.0.0.1:7890
-	#export https_proxy=http://127.0.0.1:7890
-	export no_proxy=127.0.0.1,localhost
-    	export HTTP_PROXY=http://127.0.0.1:7890
-    	#export HTTPS_PROXY=http://127.0.0.1:7890
- 	export NO_PROXY=127.0.0.1,localhost
-	echo -e "\033[32m[√] 已开启代理\033[0m"
-end
+# 获取当前用户默认的shell解释器路径
+default_shell=$(getent passwd "$USER" | awk -F: '{print $7}')
 
-# 关闭系统代理
-function proxy_off
-	set -e http_proxy
-	set -e https_proxy
-	set -e no_proxy
-  	set -e HTTP_PROXY
-	set -e HTTPS_PROXY
-	set -e NO_PROXY
-	echo -e "\033[31m[×] 已关闭代理\033[0m"
-end
-EOF
+# 提取shell解释器的名称
+shell_name=$(basename "$default_shell")
 
-echo -e "请执行以下命令加载环境变量: source /etc/profile.d/clash.fish\n"
+if [ "$shell_name" = "fish" ]; then
+	if ! grep -q "$fish_func_path" ~/.config/fish/config.fish; then
+		echo "source $fish_func_path" >> ~/.config/fish/config.fish
+	fi
+elif [ "$shell_name" = "bash" ]; then
+	if ! grep -q "$bash_func_path" ~/.bashrc; then
+		echo "source $bash_func_path" >> ~/.bashrc
+	fi
+elif [ "$shell_name" = "zsh" ]; then
+	if ! grep -q "$bash_func_path" ~/.zshrc; then
+		echo "source $bash_func_path" >> ~/.zshrc
+	fi
+fi
+
+echo -e "环境变量已注入\n"
 echo -e "请执行以下命令开启系统代理: proxy_on\n"
 echo -e "若要临时关闭系统代理，请执行: proxy_off\n"
