@@ -36,7 +36,7 @@ if_success() {
   fi
 }
 
-# 定义路劲变量
+# 定义路径变量
 Server_Dir=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
 Conf_Dir="$Server_Dir/conf"
 Log_Dir="$Server_Dir/logs"
@@ -45,7 +45,7 @@ Log_Dir="$Server_Dir/logs"
 Text1="服务关闭成功！"
 Text2="服务关闭失败！"
 # 查询并关闭程序进程
-PID_NUM=`ps -ef | grep [c]lash-linux-a | wc -l`
+PID_NUM=`PID_NUM=`ps -ef | grep [c]lash-linux-a | wc -l``
 PID=`ps -ef | grep [c]lash-linux-a | awk '{print $2}'`
 if [ $PID_NUM -ne 0 ]; then
 	kill -9 $PID

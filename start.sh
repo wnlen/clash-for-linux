@@ -155,6 +155,16 @@ Dashboard_Dir="${Work_Dir}/dashboard/public"
 sed -ri "s@^# external-ui:.*@external-ui: ${Dashboard_Dir}@g" $Conf_Dir/config.yaml
 sed -r -i '/^secret: /s@(secret: ).*@\1'${Secret}'@g' $Conf_Dir/config.yaml
 
+PID=`ps -ef | grep [c]lash-linux-a | awk '{print $2}'`
+
+if [ -z "$PID" ]; then
+    echo -e "Clash isn't running"
+else
+    echo "Running clash detected."
+    echo "Killing clash now. PID:"$PID
+
+    sudo kill -9 $PID
+fi 
 
 ## 启动Clash服务
 echo -e '\n正在启动Clash服务...'
@@ -183,31 +193,3 @@ echo -e "Clash Dashboard 访问地址: http://<ip>:9090/ui"
 echo -e "Secret: ${Secret}"
 echo ''
 
-# 添加环境变量(root权限)
-cat>/etc/profile.d/clash.sh<<EOF
-# 开启系统代理
-function proxy_on() {
-	export http_proxy=http://127.0.0.1:7890
-	export https_proxy=http://127.0.0.1:7890
-	export no_proxy=127.0.0.1,localhost
-    	export HTTP_PROXY=http://127.0.0.1:7890
-    	export HTTPS_PROXY=http://127.0.0.1:7890
- 	export NO_PROXY=127.0.0.1,localhost
-	echo -e "\033[32m[√] 已开启代理\033[0m"
-}
-
-# 关闭系统代理
-function proxy_off(){
-	unset http_proxy
-	unset https_proxy
-	unset no_proxy
-  	unset HTTP_PROXY
-	unset HTTPS_PROXY
-	unset NO_PROXY
-	echo -e "\033[31m[×] 已关闭代理\033[0m"
-}
-EOF
-
-echo -e "请执行以下命令加载环境变量: source /etc/profile.d/clash.sh\n"
-echo -e "请执行以下命令开启系统代理: proxy_on\n"
-echo -e "若要临时关闭系统代理，请执行: proxy_off\n"
