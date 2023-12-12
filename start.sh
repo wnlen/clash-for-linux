@@ -93,6 +93,9 @@ unset HTTP_PROXY
 unset HTTPS_PROXY
 unset NO_PROXY
 
+# create logs folder
+mkdir logs
+
 
 ## Clash 订阅地址检测及配置文件下载
 # 检查url是否有效

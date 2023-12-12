@@ -1,2 +1,8 @@
 test.*
 temp/clash_config.yaml
+temp/clash.yaml
+temp/config.yaml
+temp/proxy.txt
+logs/**
+conf/config.yaml
+.env
