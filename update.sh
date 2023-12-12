@@ -1,19 +1,55 @@
 #!/bin/bash
 
+# 自定义action函数，实现通用action功能
+success() {
+  echo -en "\\033[60G[\\033[1;32m  OK  \\033[0;39m]\r"
+  return 0
+}
+
+failure() {
+  local rc=$?
+  echo -en "\\033[60G[\\033[1;31mFAILED\\033[0;39m]\r"
+  [ -x /bin/plymouth ] && /bin/plymouth --details
+  return $rc
+}
+
+action() {
+  local STRING rc
+
+  STRING=$1
+  echo -n "$STRING "
+  shift
+  "$@" && success $"$STRING" || failure $"$STRING"
+  rc=$?
+  echo
+  return $rc
+}
+
+# 函数，判断命令是否正常执行
+if_success() {
+  local ReturnStatus=$3
+  if [ $ReturnStatus -eq 0 ]; then
+          action "$1" /bin/true
+  else
+          action "$2" /bin/false
+          exit 1
+  fi
+}
+
 ## Clash 订阅地址检测及配置文件下载
 # 检查url是否有效
 echo -e '\n正在检测订阅地址...'
-Text1="Clash订阅地址可访问！"
-Text2="Clash订阅地址不可访问！"
+Text1="Clash 订阅地址可访问！"
+Text2="Clash 订阅地址不可访问！"
 #curl -o /dev/null -s -m 10 --connect-timeout 10 -w %{http_code} $URL | grep '[23][0-9][0-9]' &>/dev/null
 curl -o /dev/null -L -k -sS --retry 5 -m 10 --connect-timeout 10 -w "%{http_code}" $URL | grep -E '^[23][0-9]{2}$' &>/dev/null
 ReturnStatus=$?
 if_success $Text1 $Text2 $ReturnStatus
 
 # 拉取更新config.yml文件
-echo -e '\n正在下载Clash配置文件...'
-Text3="配置文件config.yaml下载成功！"
-Text4="配置文件config.yaml下载失败，退出启动！"
+echo -e '\n正在下载 Clash 配置文件...'
+Text3="配置文件 config.yaml 下载成功！"
+Text4="配置文件 config.yaml 下载失败，退出启动！"
 
 # 尝试使用curl进行下载
 curl -L -k -sS --retry 5 -m 10 -o $Temp_Dir/clash.yaml $URL

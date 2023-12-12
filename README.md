@@ -1,8 +1,8 @@
 # 项目介绍
 
+本项目基于[clash-for-linux](https://github.com/wnlen/clash-for-linux)再次开发，增加了 fish 的功能支持。
 此项目是通过使用开源项目[clash](https://github.com/Dreamacro/clash)作为核心程序，再结合脚本实现简单的代理功能。
 
-主要是为了解决我们在服务器上下载GitHub等一些国外资源速度慢的问题。
 
 # 使用须知
 
@@ -108,9 +108,6 @@ $ proxy_off
 
 然后检查程序端口、进程以及环境变量`http_proxy|https_proxy`，若都没则说明服务正常关闭。
 
-
-<br>
-
 ## Clash Dashboard
 
 - 访问 Clash Dashboard
@@ -126,9 +123,6 @@ $ proxy_off
 - 更多教程
 
 此 Clash Dashboard 使用的是[yacd](https://github.com/haishanh/yacd)项目，详细使用方法请移步到yacd上查询。
-
-
-<br>
 
 # 常见问题
 

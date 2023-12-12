@@ -33,8 +33,6 @@ export Temp_Dir
 # 获取 CLASH_SECRET 值，如果不存在则生成一个随机数
 Secret=${CLASH_SECRET:-$(openssl rand -hex 32)}
 
-
-
 #################### 函数定义 ####################
 
 # 自定义action函数，实现通用action功能
@@ -73,8 +71,6 @@ if_success() {
 	fi
 }
 
-
-
 #################### 任务执行 ####################
 
 ## 获取CPU架构信息
@@ -98,7 +94,7 @@ unset NO_PROXY
 
 # create logs folder
 if [ -d $Server_Dir"/logs" ]; then
-	echo ""
+	echo "" > /dev/null
 else
 	echo -e "\nlogs 文件夹缺失，正在创建..."
 	mkdir logs
@@ -106,20 +102,17 @@ fi
 
 Actual_Conf="$Conf_Dir/config.yaml"
 
-# 获取文件的修改时间（秒级时间戳）
-modified_time=$(stat -c %Y "$Actual_Conf")
-
-# 获取当前时间（秒级时间戳）
-current_time=$(date +%s)
-
-# 计算文件修改时间距离现在的时间差（秒）
-time_diff=$((current_time - modified_time))
-
-# 计算24小时对应的秒数
-tf_hours=$((24 * 60 * 60))
-
 if [ -f $Actual_Conf ]; then
-	echo -e "\n正在检查先前配置文件"
+	# 获取文件的修改时间（秒级时间戳）
+	modified_time=$(stat -c %Y "$Actual_Conf")
+	# 获取当前时间（秒级时间戳）
+	current_time=$(date +%s)
+	# 计算文件修改时间距离现在的时间差（秒）
+	time_diff=$((current_time - modified_time))
+	# 计算24小时对应的秒数
+	tf_hours=$((24 * 60 * 60))
+
+	echo -e "正在检查先前配置文件"
 	if [ "$time_diff" -lt "$tf_hours" ]; then
 		echo -e "\n当前配置文件有效，跳过更新"
 	else
@@ -141,16 +134,16 @@ PID=`ps -ef | grep [c]lash-linux-a | awk '{print $2}'`
 
 ## Prevent clash instance is started again
 if [ -z "$PID" ]; then
-    echo -e "Clash isn't running"
+    echo -e "\nClash 未在运行"
 else
-    echo "Running clash detected."
-    echo "Killing clash now. PID:"$PID
+    echo -e "\n已检测到正在运行的 Clash 实例"
+    echo -e "\n正在停止 Clash... PID:"$PID
 
     sudo kill -9 $PID
 fi 
 
 ## 启动Clash服务
-echo -e '\n正在启动Clash服务...'
+echo -e '\n正在启动 Clash 服务...'
 Text5="服务启动成功！"
 Text6="服务启动失败！"
 if [[ $CpuArch =~ "x86_64" || $CpuArch =~ "amd64"  ]]; then
@@ -172,7 +165,7 @@ fi
 
 # Output Dashboard access address and Secret
 echo ''
-echo -e "Clash Dashboard 访问地址: http://<ip>:9090/ui"
+echo -e "Clash Dashboard 访问地址: http://localhost:9090/ui"
 echo -e "Secret: ${Secret}"
 echo ''
 
