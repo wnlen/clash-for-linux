@@ -1,64 +1,54 @@
-[TOC]
+# 项目介绍 🌟
 
-# 项目介绍
+> **For English users:** Please refer to the English version of the README located at [README_en.md](./README_en.md).
 
-此项目是通过使用开源项目[clash](https://github.com/Dreamacro/clash)作为核心程序，再结合脚本实现简单的代理功能。
+本项目基于开源项目 [clash](https://github.com/Dreamacro/clash) 作为核心程序，通过脚本实现简单的代理功能。  
+旨在解决服务器上下载 GitHub 等国外资源速度慢的问题。
 
-主要是为了解决我们在服务器上下载GitHub等一些国外资源速度慢的问题。
+---
 
-<br>
+# 使用须知 📌
 
-# 使用须知
+- **权限要求**：运行此项目建议使用 `root` 用户，或通过 `sudo` 提权。
+- **问题排查**：使用过程中如遇问题，请优先查阅已有的 [issues](https://github.com/wanhebin/clash-for-linux/issues)。
+- **敏感信息保护**：提交 issue 前，请替换提交内容中的敏感信息（如：订阅地址）。
+- **配置来源**：本项目基于 [clash](https://github.com/Dreamacro/clash) 和 [yacd](https://github.com/haishanh/yacd) 进行配置整合，详细配置请参考原项目。
+- **订阅地址**：此项目不提供任何订阅信息，请自行准备 Clash 订阅地址。
+- **配置文件**：运行前需手动修改 `.env` 文件中的 `CLASH_URL` 变量值，否则无法正常运行。
+- **系统兼容**：当前已在 RHEL 和 Debian 系列 Linux 系统中测试，其他系统可能需适当调整脚本。
+- **平台支持**：支持 x86_64 和 aarch64 平台。
 
-- 运行本项目建议使用root用户，或者使用 sudo 提权。
-- 使用过程中如遇到问题，请优先查已有的 [issues](https://github.com/wanhebin/clash-for-linux/issues)。
-- 在进行issues提交前，请替换提交内容中是敏感信息（例如：订阅地址）。
-- 本项目是基于 [clash](https://github.com/Dreamacro/clash) 、[yacd](https://github.com/haishanh/yacd) 进行的配置整合，关于clash、yacd的详细配置请去原项目查看。
-- 此项目不提供任何订阅信息，请自行准备Clash订阅地址。
-- 运行前请手动更改`.env`文件中的`CLASH_URL`变量值，否则无法正常运行。
-- 当前在RHEL系列和Debian系列Linux系统中测试过，其他系列可能需要适当修改脚本。
-- 支持 x86_64/aarch64 平台
+> ⚠️ **注意**：遇到无法独自解决的问题，请先前往 [Issues](https://github.com/wanhebin/clash-for-linux/issues) 寻找解决方案。重复性问题将不再提供解答。
 
-> **注意**：当你在使用此项目时，遇到任何无法独自解决的问题请优先前往 [Issues](https://github.com/wanhebin/clash-for-linux/issues) 寻找解决方法。由于空闲时间有限，后续将不再对Issues中 “已经解答”、“已有解决方案” 的问题进行重复性的回答。
+---
 
-<br>
+# 使用教程 📖
 
-# 使用教程
-
-## 下载项目
-
-下载项目
+## 下载项目 ⬇️
 
 ```bash
-$ git clone https://github.com/wanhebin/clash-for-linux.git
+git clone https://github.com/wanhebin/clash-for-linux.git
+cd clash-for-linux
+vim .env
 ```
 
-进入到项目目录，编辑`.env`文件，修改变量`CLASH_URL`的值。
+在 `.env` 文件中修改变量 `CLASH_URL` 的值。  
+> **注意**：变量 `CLASH_SECRET` 为自定义 Clash Secret，若留空，脚本将自动生成随机字符串。
+
+---
+
+## 启动程序 🚀
+
+直接运行 `start.sh` 脚本。
 
 ```bash
-$ cd clash-for-linux
-$ vim .env
+cd clash-for-linux
+sudo bash start.sh
 ```
 
-> **注意：** `.env` 文件中的变量 `CLASH_SECRET` 为自定义 Clash Secret，值为空时，脚本将自动生成随机字符串。
-
-<br>
-
-## 启动程序
-
-直接运行脚本文件`start.sh`
-
-- 进入项目目录
+运行后会输出以下信息：
 
 ```bash
-$ cd clash-for-linux
-```
-
-- 运行启动脚本
-
-```bash
-$ sudo bash start.sh
-
 正在检测订阅地址...
 Clash订阅地址可访问！                                      [  OK  ]
 
@@ -70,102 +60,78 @@ Clash订阅地址可访问！                                      [  OK  ]
 
 Clash Dashboard 访问地址：http://<ip>:9090/ui
 Secret：xxxxxxxxxxxxx
-
-请执行以下命令加载环境变量: source /etc/profile.d/clash.sh
-
-请执行以下命令开启系统代理: proxy_on
-
-若要临时关闭系统代理，请执行: proxy_off
-
 ```
+
+### 加载环境变量
 
 ```bash
-$ source /etc/profile.d/clash.sh
-$ proxy_on
+source /etc/profile.d/clash.sh
+proxy_on
 ```
 
-- 检查服务端口
+### 验证服务
+
+- 检查服务端口：
 
 ```bash
-$ netstat -tln | grep -E '9090|789.'
-tcp        0      0 127.0.0.1:9090          0.0.0.0:*               LISTEN     
-tcp6       0      0 :::7890                 :::*                    LISTEN     
-tcp6       0      0 :::7891                 :::*                    LISTEN     
-tcp6       0      0 :::7892                 :::*                    LISTEN
+netstat -tln | grep -E '9090|789.'
 ```
 
-- 检查环境变量
+- 检查环境变量：
 
 ```bash
-$ env | grep -E 'http_proxy|https_proxy'
-http_proxy=http://127.0.0.1:7890
-https_proxy=http://127.0.0.1:7890
+env | grep -E 'http_proxy|https_proxy'
 ```
 
-以上步鄹如果正常，说明服务clash程序启动成功，现在就可以体验高速下载github资源了。
+如果以上步骤正常（服务端口与环境变量检查显示非空），说明 Clash 服务已成功启动，现在即可体验高速下载 GitHub 资源。
 
-<br>
+---
 
-## 重启程序
+## 重启程序 🔄
 
-如果需要对Clash配置进行修改，请修改 `conf/config.yaml` 文件。然后运行 `restart.sh` 脚本进行重启。
-
-> **注意：**
-> 重启脚本 `restart.sh` 不会更新订阅信息。
-
-<br>
-
-## 停止程序
-
-- 进入项目目录
+若需修改配置文件，请编辑 `conf/config.yaml`，然后运行：
 
 ```bash
-$ cd clash-for-linux
+sudo bash restart.sh
 ```
 
-- 关闭服务
+> ⚠️ 重启脚本 `restart.sh` 不会更新订阅信息。
+
+---
+
+## 停止程序 🛑
 
 ```bash
-$ sudo bash shutdown.sh
-
-服务关闭成功，请执行以下命令关闭系统代理：proxy_off
-
+cd clash-for-linux
+sudo bash shutdown.sh
+proxy_off
 ```
 
-```bash
-$ proxy_off
-```
+检查程序端口、进程及环境变量 (`http_proxy|https_proxy`) 是否已清除，确认服务已关闭。
 
-然后检查程序端口、进程以及环境变量`http_proxy|https_proxy`，若都没则说明服务正常关闭。
+---
 
+## Clash Dashboard 🌐
 
-<br>
+- **访问地址**：启动成功后会输出 Dashboard 的访问地址，例如：http://192.168.0.1:9090/ui  
+- **登录管理**：  
+  - `API Base URL`：输入 `http://<ip>:9090`
+  - `Secret(optional)`：输入启动成功时输出的 Secret  
 
-## Clash Dashboard
+点击 `Add` 并选择对应的地址，即可通过浏览器进行管理。  
+更多使用说明请参考 [yacd](https://github.com/haishanh/yacd) 项目。
 
-- 访问 Clash Dashboard
+---
 
-通过浏览器访问 `start.sh` 执行成功后输出的地址，例如：http://192.168.0.1:9090/ui
+# 常见问题 ❓
 
-- 登录管理界面
+1. **脚本报错 `-en [ OK ]`**  
+   部分Linux系统默认的 shell `/bin/sh` 被更改为`dash`，运行脚本会出现报错（报错内容一般会有`-en [ OK ]`）。建议使用`bash xxx.sh`运行脚本。
 
-在`API Base URL`一栏中输入：http://\<ip\>:9090 ，在`Secret(optional)`一栏中输入启动成功后输出的Secret。
+2. **UI 界面无法打开**  
+   这通常是因为提供的 Clash 配置文件经过 base64 编码且不符合标准格式。  
+   项目已集成自动识别和转换功能，但若仍无法使用，需自行转换订阅地址（不推荐使用第三方工具，存在泄露风险）。  
+   如需排查问题，请参考 `logs/clash.log`。
 
-点击Add并选择刚刚输入的管理界面地址，之后便可在浏览器上进行一些配置。
-
-- 更多教程
-
-此 Clash Dashboard 使用的是[yacd](https://github.com/haishanh/yacd)项目，详细使用方法请移步到yacd上查询。
-
-
-<br>
-
-# 常见问题
-
-1. 部分Linux系统默认的 shell `/bin/sh` 被更改为 `dash`，运行脚本会出现报错（报错内容一般会有 `-en [ OK ]`）。建议使用 `bash xxx.sh` 运行脚本。
-
-2. 部分用户在UI界面找不到代理节点，基本上是因为厂商提供的clash配置文件是经过base64编码的，且配置文件格式不符合clash配置标准。
-
-   目前此项目已集成自动识别和转换clash配置文件的功能。如果依然无法使用，则需要通过自建或者第三方平台（不推荐，有泄露风险）对订阅地址转换。
-   
-3. 程序日志中出现`error: unsupported rule type RULE-SET`报错，解决方法查看官方[WIKI](https://github.com/Dreamacro/clash/wiki/FAQ#error-unsupported-rule-type-rule-set)
+3. **程序日志报错 `error: unsupported rule type RULE-SET`**  
+   请查阅 Clash 官方 [WIKI](https://github.com/Dreamacro/clash/wiki/FAQ#error-unsupported-rule-type-rule-set) 获取解决方法。
