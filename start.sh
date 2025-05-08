@@ -31,7 +31,6 @@ Secret=${CLASH_SECRET:-$(openssl rand -hex 32)}
 # 初始化跳过下载配置标志
 SKIP_DOWNLOAD_CONFIG=false
 
-# 处理命令行参数
 # 初始化跳过编辑profile标志
 SKIP_EDIT_PROFILE=false
 
