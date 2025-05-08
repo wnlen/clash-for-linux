@@ -34,6 +34,9 @@ SKIP_DOWNLOAD_CONFIG=false
 # 初始化跳过编辑profile标志
 SKIP_EDIT_PROFILE=false
 
+# 初始化跳过系统托盘图标标志
+SKIP_TRAY_ICON=false
+
 # 处理命令行参数
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -45,6 +48,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_EDIT_PROFILE=true
             shift
             ;;
+        --skip-tray-icon)
+            SKIP_TRAY_ICON=true
+            shift
+            ;;
         *)
             echo "未知参数: $1"
             exit 1
@@ -54,6 +61,51 @@ done
 
 
 #################### 函数定义 ####################
+
+# 检查依赖是否安装
+check_dependencies() {
+    if ! command -v yad &> /dev/null; then
+        echo -e "\033[33m[WARN] 未检测到 yad，尝试安装...\033[0m"
+        if command -v apt &> /dev/null; then
+            sudo apt update && sudo apt install -y yad
+        elif command -v yum &> /dev/null; then
+            sudo yum install -y yad
+        elif command -v dnf &> /dev/null; then
+            sudo dnf install -y yad
+        else
+            echo -e "\033[31m[ERROR] 无法安装 yad，请手动安装后重试\033[0m"
+            return 1
+        fi
+    fi
+    return 0
+}
+
+# 启动系统托盘图标
+start_tray_icon() {
+    local icon_path="$Server_Dir/icon/Clash_Logo.png"
+    
+    # 检查图标文件是否存在
+    if [ ! -f "$icon_path" ]; then
+        echo -e "\033[31m[ERROR] 未找到图标文件: $icon_path\033[0m"
+        return 1
+    fi
+    
+    # 检查是否已有Clash托盘图标
+    if ps -ef | grep -q "[y]ad.*clash"; then
+        echo -e "\n[INFO] 系统托盘图标已存在，跳过添加"
+        return 0
+    fi
+    
+    # 启动系统托盘图标
+    nohup yad --notification \
+        --image="$icon_path" \
+        --text="Clash" \
+        --command="xdg-open http://127.0.0.1:9090/ui" \
+        --no-middle \
+        &> "$Log_Dir/tray.log" &
+    
+    echo -e "\n[INFO] 系统托盘图标已启动"
+}
 
 # 自定义action函数，实现通用action功能
 success() {
@@ -290,4 +342,13 @@ if [ "$SKIP_EDIT_PROFILE" = false ]; then
     setup_proxy_env "$Secret"
 else
     echo -e "\n[INFO] 跳过系统代理环境变量配置..."
+fi
+
+# 启动系统托盘图标
+if [ "$SKIP_TRAY_ICON" = false ]; then
+    if check_dependencies; then
+        start_tray_icon
+    fi
+else
+    echo -e "\n[INFO] 跳过系统托盘图标启动..."
 fi
