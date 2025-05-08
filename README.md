@@ -10,7 +10,6 @@
 
 # 使用须知
 
-- 运行本项目建议使用root用户，或者使用 sudo 提权。
 - 使用过程中如遇到问题，请优先查已有的 [issues](https://github.com/wanhebin/clash-for-linux/issues)。
 - 在进行issues提交前，请替换提交内容中是敏感信息（例如：订阅地址）。
 - 本项目是基于 [clash](https://github.com/Dreamacro/clash) 、[yacd](https://github.com/haishanh/yacd) 进行的配置整合，关于clash、yacd的详细配置请去原项目查看。
@@ -18,6 +17,8 @@
 - 运行前请手动更改`.env`文件中的`CLASH_URL`变量值，否则无法正常运行。
 - 当前在RHEL系列和Debian系列Linux系统中测试过，其他系列可能需要适当修改脚本。
 - 支持 x86_64/aarch64 平台
+- 如果配置已经下载过，用户可以通过 `--skip-download-config` 参数跳过下载配置文件的步骤。
+- 如果用户不希望写入 /etc/profile.d/clash.sh，可以使用 `--skip-edit-profile` 参数跳过写入操作。
 
 > **注意**：当你在使用此项目时，遇到任何无法独自解决的问题请优先前往 [Issues](https://github.com/wanhebin/clash-for-linux/issues) 寻找解决方法。由于空闲时间有限，后续将不再对Issues中 “已经解答”、“已有解决方案” 的问题进行重复性的回答。
 
