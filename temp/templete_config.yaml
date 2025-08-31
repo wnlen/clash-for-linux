@@ -1,14 +1,14 @@
 # HTTP 代理端口
-port: 7890 
+port: CLASH_HTTP_PORT_PLACEHOLDER
 
 # SOCKS5 代理端口
-socks-port: 7891 
+socks-port: CLASH_SOCKS_PORT_PLACEHOLDER
 
 # Linux 和 macOS 的 redir 代理端口
-redir-port: 7892 
+redir-port: CLASH_REDIR_PORT_PLACEHOLDER
 
 # 允许局域网的连接
-allow-lan: true
+allow-lan: CLASH_ALLOW_LAN_PLACEHOLDER
 
 # 规则模式：Rule（规则） / Global（全局代理）/ Direct（全局直连）
 mode: rule
@@ -17,7 +17,7 @@ mode: rule
 # 5 个级别：silent / info / warning / error / debug。级别越高日志输出量越大，越倾向于调试，若需要请自行开启。
 log-level: silent
 # Clash 的 RESTful API
-external-controller: '0.0.0.0:9090'
+external-controller: 'EXTERNAL_CONTROLLER_PLACEHOLDER'
 
 # RESTful API 的口令
 secret: 'b&ZlKTte5OnEt2Sn'
