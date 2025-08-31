@@ -108,8 +108,16 @@ unset NO_PROXY
 echo -e '\n正在检测订阅地址...'
 Text1="Clash订阅地址可访问！"
 Text2="Clash订阅地址不可访问！"
-#curl -o /dev/null -s -m 10 --connect-timeout 10 -w %{http_code} $URL | grep '[23][0-9][0-9]' &>/dev/null
-curl -o /dev/null -L -k -sS --retry 5 -m 10 --connect-timeout 10 -w "%{http_code}" $URL | grep -E '^[23][0-9]{2}$' &>/dev/null
+
+# 构建检测 curl 命令，添加自定义请求头
+CHECK_CMD="curl -o /dev/null -L -k -sS --retry 5 -m 10 --connect-timeout 10 -w \"%{http_code}\""
+if [ -n "$CLASH_HEADERS" ]; then
+	CHECK_CMD="$CHECK_CMD -H '$CLASH_HEADERS'"
+fi
+CHECK_CMD="$CHECK_CMD $URL"
+
+# 检查订阅地址
+eval $CHECK_CMD | grep -E '^[23][0-9]{2}$' &>/dev/null
 ReturnStatus=$?
 if_success $Text1 $Text2 $ReturnStatus
 
@@ -174,6 +182,7 @@ cat $Temp_Dir/proxy.txt >> $Temp_Dir/config.yaml
 sed -i "s/CLASH_HTTP_PORT_PLACEHOLDER/${CLASH_HTTP_PORT}/g" $Temp_Dir/config.yaml
 sed -i "s/CLASH_SOCKS_PORT_PLACEHOLDER/${CLASH_SOCKS_PORT}/g" $Temp_Dir/config.yaml
 sed -i "s/CLASH_REDIR_PORT_PLACEHOLDER/${CLASH_REDIR_PORT}/g" $Temp_Dir/config.yaml
+sed -i "s/CLASH_LISTEN_IP_PLACEHOLDER/${CLASH_LISTEN_IP}/g" $Temp_Dir/config.yaml
 sed -i "s/CLASH_ALLOW_LAN_PLACEHOLDER/${CLASH_ALLOW_LAN}/g" $Temp_Dir/config.yaml
 
 # 配置 external-controller

@@ -7,6 +7,9 @@ socks-port: CLASH_SOCKS_PORT_PLACEHOLDER
 # Linux 和 macOS 的 redir 代理端口
 redir-port: CLASH_REDIR_PORT_PLACEHOLDER
 
+# 监听IP地址
+bind-address: CLASH_LISTEN_IP_PLACEHOLDER
+
 # 允许局域网的连接
 allow-lan: CLASH_ALLOW_LAN_PLACEHOLDER
 
