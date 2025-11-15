@@ -30,6 +30,15 @@ URL=${CLASH_URL:?Error: CLASH_URL variable is not set or empty}
 # 获取 CLASH_SECRET 值，如果不存在则生成一个随机数
 Secret=${CLASH_SECRET:-$(openssl rand -hex 32)}
 
+# 设置默认值
+CLASH_HTTP_PORT=${CLASH_HTTP_PORT:-7890}
+CLASH_SOCKS_PORT=${CLASH_SOCKS_PORT:-7891}
+CLASH_REDIR_PORT=${CLASH_REDIR_PORT:-7892}
+CLASH_LISTEN_IP=${CLASH_LISTEN_IP:-0.0.0.0}
+CLASH_ALLOW_LAN=${CLASH_ALLOW_LAN:-true}
+EXTERNAL_CONTROLLER_ENABLED=${EXTERNAL_CONTROLLER_ENABLED:-true}
+EXTERNAL_CONTROLLER=${EXTERNAL_CONTROLLER:-0.0.0.0:9090}
+
 
 
 #################### 函数定义 ####################
@@ -99,8 +108,16 @@ unset NO_PROXY
 echo -e '\n正在检测订阅地址...'
 Text1="Clash订阅地址可访问！"
 Text2="Clash订阅地址不可访问！"
-#curl -o /dev/null -s -m 10 --connect-timeout 10 -w %{http_code} $URL | grep '[23][0-9][0-9]' &>/dev/null
-curl -o /dev/null -L -k -sS --retry 5 -m 10 --connect-timeout 10 -w "%{http_code}" $URL | grep -E '^[23][0-9]{2}$' &>/dev/null
+
+# 构建检测 curl 命令，添加自定义请求头
+CHECK_CMD="curl -o /dev/null -L -k -sS --retry 5 -m 10 --connect-timeout 10 -w \"%{http_code}\""
+if [ -n "$CLASH_HEADERS" ]; then
+	CHECK_CMD="$CHECK_CMD -H '$CLASH_HEADERS'"
+fi
+CHECK_CMD="$CHECK_CMD $URL"
+
+# 检查订阅地址
+eval $CHECK_CMD | grep -E '^[23][0-9]{2}$' &>/dev/null
 ReturnStatus=$?
 if_success $Text1 $Text2 $ReturnStatus
 
@@ -109,14 +126,27 @@ echo -e '\n正在下载Clash配置文件...'
 Text3="配置文件config.yaml下载成功！"
 Text4="配置文件config.yaml下载失败，退出启动！"
 
+# 构建 curl 命令，添加自定义请求头
+CURL_CMD="curl -L -k -sS --retry 5 -m 10 -o $Temp_Dir/clash.yaml"
+if [ -n "$CLASH_HEADERS" ]; then
+	CURL_CMD="$CURL_CMD -H '$CLASH_HEADERS'"
+fi
+CURL_CMD="$CURL_CMD $URL"
+
 # 尝试使用curl进行下载
-curl -L -k -sS --retry 5 -m 10 -o $Temp_Dir/clash.yaml $URL
+eval $CURL_CMD
 ReturnStatus=$?
 if [ $ReturnStatus -ne 0 ]; then
 	# 如果使用curl下载失败，尝试使用wget进行下载
+	WGET_CMD="wget -q --no-check-certificate -O $Temp_Dir/clash.yaml"
+	if [ -n "$CLASH_HEADERS" ]; then
+		WGET_CMD="$WGET_CMD --header='$CLASH_HEADERS'"
+	fi
+	WGET_CMD="$WGET_CMD $URL"
+	
 	for i in {1..10}
 	do
-		wget -q --no-check-certificate -O $Temp_Dir/clash.yaml $URL
+		eval $WGET_CMD
 		ReturnStatus=$?
 		if [ $ReturnStatus -eq 0 ]; then
 			break
@@ -144,15 +174,33 @@ fi
 #sed -n '/^proxies:/,$p' $Temp_Dir/clash.yaml > $Temp_Dir/proxy.txt
 sed -n '/^proxies:/,$p' $Temp_Dir/clash_config.yaml > $Temp_Dir/proxy.txt
 
-# 合并形成新的config.yaml
+# 合并形成新的config.yaml，并替换配置占位符
 cat $Temp_Dir/templete_config.yaml > $Temp_Dir/config.yaml
 cat $Temp_Dir/proxy.txt >> $Temp_Dir/config.yaml
+
+# 替换配置文件中的占位符为环境变量值
+sed -i "s/CLASH_HTTP_PORT_PLACEHOLDER/${CLASH_HTTP_PORT}/g" $Temp_Dir/config.yaml
+sed -i "s/CLASH_SOCKS_PORT_PLACEHOLDER/${CLASH_SOCKS_PORT}/g" $Temp_Dir/config.yaml
+sed -i "s/CLASH_REDIR_PORT_PLACEHOLDER/${CLASH_REDIR_PORT}/g" $Temp_Dir/config.yaml
+sed -i "s/CLASH_LISTEN_IP_PLACEHOLDER/${CLASH_LISTEN_IP}/g" $Temp_Dir/config.yaml
+sed -i "s/CLASH_ALLOW_LAN_PLACEHOLDER/${CLASH_ALLOW_LAN}/g" $Temp_Dir/config.yaml
+
+# 配置 external-controller
+if [ "$EXTERNAL_CONTROLLER_ENABLED" = "true" ]; then
+	sed -i "s/EXTERNAL_CONTROLLER_PLACEHOLDER/${EXTERNAL_CONTROLLER}/g" $Temp_Dir/config.yaml
+else
+	# 如果禁用 external-controller，则注释掉该行
+	sed -i "s/external-controller: 'EXTERNAL_CONTROLLER_PLACEHOLDER'/# external-controller: disabled/g" $Temp_Dir/config.yaml
+fi
+
 \cp $Temp_Dir/config.yaml $Conf_Dir/
 
 # Configure Clash Dashboard
 Work_Dir=$(cd $(dirname $0); pwd)
 Dashboard_Dir="${Work_Dir}/dashboard/public"
-sed -ri "s@^# external-ui:.*@external-ui: ${Dashboard_Dir}@g" $Conf_Dir/config.yaml
+if [ "$EXTERNAL_CONTROLLER_ENABLED" = "true" ]; then
+	sed -ri "s@^# external-ui:.*@external-ui: ${Dashboard_Dir}@g" $Conf_Dir/config.yaml
+fi
 sed -r -i '/^secret: /s@(secret: ).*@\1'${Secret}'@g' $Conf_Dir/config.yaml
 
 
@@ -179,19 +227,23 @@ fi
 
 # Output Dashboard access address and Secret
 echo ''
-echo -e "Clash Dashboard 访问地址: http://<ip>:9090/ui"
-echo -e "Secret: ${Secret}"
+if [ "$EXTERNAL_CONTROLLER_ENABLED" = "true" ]; then
+	echo -e "Clash Dashboard 访问地址: http://${EXTERNAL_CONTROLLER}/ui"
+	echo -e "Secret: ${Secret}"
+else
+	echo -e "External Controller (Dashboard) 已禁用"
+fi
 echo ''
 
-# 添加环境变量(root权限)
+# 添加环境变量(root权限) - 使用配置的端口
 cat>/etc/profile.d/clash.sh<<EOF
 # 开启系统代理
 function proxy_on() {
-	export http_proxy=http://127.0.0.1:7890
-	export https_proxy=http://127.0.0.1:7890
+	export http_proxy=http://${CLASH_LISTEN_IP}:${CLASH_HTTP_PORT}
+	export https_proxy=http://${CLASH_LISTEN_IP}:${CLASH_HTTP_PORT}
 	export no_proxy=127.0.0.1,localhost
-    	export HTTP_PROXY=http://127.0.0.1:7890
-    	export HTTPS_PROXY=http://127.0.0.1:7890
+    	export HTTP_PROXY=http://${CLASH_LISTEN_IP}:${CLASH_HTTP_PORT}
+    	export HTTPS_PROXY=http://${CLASH_LISTEN_IP}:${CLASH_HTTP_PORT}
  	export NO_PROXY=127.0.0.1,localhost
 	echo -e "\033[32m[√] 已开启代理\033[0m"
 }
