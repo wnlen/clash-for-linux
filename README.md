@@ -160,6 +160,45 @@ $ proxy_off
 
 <br>
 
+## 设置代理
+1. 开启 IP 转发
+
+```bash
+echo "net.ipv4.ip_forward = 1" | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+```
+
+2.配置iptables
+```bash
+# 先清空旧规则
+sudo iptables -t nat -F
+
+# 允许本机访问代理端口
+sudo iptables -t nat -A OUTPUT -p tcp --dport 7890 -j RETURN
+sudo iptables -t nat -A OUTPUT -p tcp --dport 7891 -j RETURN
+sudo iptables -t nat -A OUTPUT -p tcp --dport 7892 -j RETURN
+
+# 让所有 TCP 流量通过 7892 代理
+sudo iptables -t nat -A PREROUTING -p tcp -j REDIRECT --to-ports 7892
+
+# 保存规则
+sudo iptables-save | sudo tee /etc/iptables.rules
+```
+
+3. 让 iptables 规则开机生效
+在 `/etc/rc.local`（或 `/etc/rc.d/rc.local`）加上：
+
+```bash
+#!/bin/bash
+iptables-restore < /etc/iptables.rules
+exit 0
+```
+
+```bash
+sudo chmod +x /etc/rc.local
+```
+
+
 # 常见问题
 
 1. 部分Linux系统默认的 shell `/bin/sh` 被更改为 `dash`，运行脚本会出现报错（报错内容一般会有 `-en [ OK ]`）。建议使用 `bash xxx.sh` 运行脚本。
