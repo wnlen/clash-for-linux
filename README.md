@@ -2,9 +2,7 @@
 
 # 项目介绍
 
-此项目是通过使用开源项目[clash](https://github.com/Dreamacro/clash)作为核心程序，再结合脚本实现简单的代理功能。
-
-主要是为了解决我们在服务器上下载GitHub等一些国外资源速度慢的问题。
+此项目以 Clash Meta / Mihomo 内核为核心，提供自动识别架构并下载对应二进制的能力，同时通过 systemd 统一管理服务，配合清晰的目录结构，便于维护与回滚。基于脚本实现开箱即用的代理体验，主要用于解决服务器访问 GitHub 等海外资源速度慢的问题。
 <br>
 
 **2026.01.13**持续更新。
@@ -126,6 +124,16 @@ $ sudo clashctl status
 <br>
 
 ## 一键安装/卸载
+
+🚀 **一键安装（当前项目）**
+
+当前项目支持一键安装，在终端中执行以下命令即可完成安装：
+
+```bash
+git clone --branch master --depth 1 https://github.com/wnlen/clash-for-linux.git \
+  && cd clash-for-linux \
+  && bash install.sh
+```
 
 脚本会自动识别安装路径、创建低权限用户、检测端口冲突，并根据架构自动下载 Clash 内核（可通过 `CLASH_DOWNLOAD_URL_TEMPLATE` 自定义下载地址）。
 
