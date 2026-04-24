@@ -266,7 +266,8 @@ proxy_group_exists() {
 
   [ -n "${group:-}" ] || return 1
 
-  [ "$(proxy_groups_json | "$(yq_bin)" -p=json eval ".proxies | has(\"$group\")" - 2>/dev/null)" = "true" ]
+  # 用 to_entries + env(GROUP) 避免 emoji key 触发 yq lexer 错误
+  [ "$(GROUP="$group" proxy_groups_json         | GROUP="$group" "$(yq_bin)" -p=json eval             '.proxies | to_entries | .[] | select(.key == env(GROUP)) | "true"'             - 2>/dev/null | head -1)" = "true" ]
 }
 
 proxy_group_type() {
@@ -275,7 +276,10 @@ proxy_group_type() {
   [ -n "${group:-}" ] || die "策略组名称不能为空"
   proxy_group_exists "$group" || die "策略组不存在：$group"
 
-  proxy_groups_json | "$(yq_bin)" -p=json eval ".proxies.\"$group\".type // \"\"" - 2>/dev/null
+  GROUP="$group" proxy_groups_json \
+    | GROUP="$group" "$(yq_bin)" -p=json eval \
+        '.proxies | to_entries | .[] | select(.key == env(GROUP)) | .value.type // ""' \
+        - 2>/dev/null
 }
 
 proxy_group_type_key() {
@@ -378,8 +382,10 @@ proxy_group_current() {
   [ -n "${group:-}" ] || die "策略组名称不能为空"
   proxy_group_exists "$group" || die "策略组不存在：$group"
 
-  proxy_groups_json \
-    | "$(yq_bin)" -p=json eval ".proxies.\"$group\".now // \"\"" - 2>/dev/null
+  GROUP="$group" proxy_groups_json \
+    | GROUP="$group" "$(yq_bin)" -p=json eval \
+        '.proxies | to_entries | .[] | select(.key == env(GROUP)) | .value.now // ""' \
+        - 2>/dev/null
 }
 
 proxy_group_nodes() {
@@ -388,8 +394,10 @@ proxy_group_nodes() {
   [ -n "${group:-}" ] || die "策略组名称不能为空"
   proxy_group_exists "$group" || die "策略组不存在：$group"
 
-  proxy_groups_json \
-    | "$(yq_bin)" -p=json eval ".proxies.\"$group\".all[] // \"\"" - 2>/dev/null
+  GROUP="$group" proxy_groups_json \
+    | GROUP="$group" "$(yq_bin)" -p=json eval \
+        '.proxies | to_entries | .[] | select(.key == env(GROUP)) | .value.all[] // ""' \
+        - 2>/dev/null
 }
 
 proxy_node_is_descriptive_entry() {
@@ -479,24 +487,14 @@ proxy_group_supports_manual_pick() {
   [ "$type_key" = "selector" ] || return 1
 
   has_now="$(
-    proxy_groups_json \
-      | "$(yq_bin)" -p=json eval ".proxies.\"$group\".now != null" - 2>/dev/null \
-      | head -n 1
+    GROUP="$group" proxy_groups_json       | GROUP="$group" "$(yq_bin)" -p=json eval           '.proxies | to_entries | .[] | select(.key == env(GROUP)) | .value.now != null'           - 2>/dev/null       | head -n 1
   )"
   [ "${has_now:-false}" = "true" ] || return 1
 
   proxy_group_has_selectable_candidates "$group"
 }
 
-proxy_group_display_list() {
-  local group
-
-  while IFS= read -r group; do
-    [ -n "${group:-}" ] || continue
-    proxy_group_has_selectable_candidates "$group" || continue
-    echo "$group"
-  done < <(proxy_group_list)
-}
+# NOTE: 已由文件底部的高性能版本替代，此处保留仅供参考
 
 proxy_group_manual_list() {
   local group
@@ -833,13 +831,17 @@ proxy_group_current_display() {
 }
 
 proxy_group_display_list() {
-  local group
-
-  while IFS= read -r group; do
-    [ -n "${group:-}" ] || continue
-    proxy_group_can_show_candidates "$group" || continue
-    echo "$group"
-  done < <(proxy_group_list)
+  # 单次 API 调用，在 yq 内完成策略组类型过滤，避免 N+1 次请求导致策略组丢失
+  proxy_groups_json \
+    | "$(yq_bin)" -p=json eval '
+        .proxies | to_entries | .[] |
+        select(.value.all != null) |
+        select(
+          (.value.type // "" | downcase | sub("[-_ ]+"; "")) as $t |
+          ($t == "selector" or $t == "urltest" or $t == "fallback" or $t == "loadbalance")
+        ) |
+        .key
+      ' - 2>/dev/null
 }
 
 proxy_group_select() {
@@ -848,11 +850,12 @@ proxy_group_select() {
   local base secret
   local code response_file response_body
   local available_node found
+  local group_enc
 
-  [ -n "${group:-}" ] || die "绛栫暐缁勫悕绉颁笉鑳戒负绌?"
-  [ -n "${node:-}" ] || die "鑺傜偣鍚嶇О涓嶈兘涓虹┖"
+  [ -n "${group:-}" ] || die "策略组名称不能为空"
+  [ -n "${node:-}" ] || die "节点名称不能为空"
 
-  proxy_group_exists "$group" || die "绛栫暐缁勪笉瀛樺湪锛?group"
+  proxy_group_exists "$group" || die "策略组不存在：$group"
   proxy_group_can_show_candidates "$group" || die "$(proxy_group_manual_pick_error_message "$group")"
   proxy_node_is_selectable_candidate "$node" || die "节点不是可切换节点：$node"
 
@@ -866,18 +869,19 @@ proxy_group_select() {
   done < <(proxy_group_selectable_nodes "$group")
 
   if [ "$found" != "true" ]; then
-    die "鑺傜偣涓嶅瓨鍦ㄤ簬绛栫暐缁勪腑锛?group -> $node"
+    die "节点不存在于策略组中：$group -> $node"
   fi
 
   base="$(controller_api_base)"
   secret="$(controller_secret)"
+  group_enc="$(proxy_node_url_encode "$group")"
   response_file="$(mktemp)"
   code="$(
     curl -sS -o "$response_file" -w "%{http_code}" -X PUT \
       -H "Content-Type: application/json" \
       ${secret:+-H "Authorization: Bearer $secret"} \
       --data "{\"name\":\"$node\"}" \
-      "$base/proxies/$group"
+      "$base/proxies/$group_enc"
   )"
 
   if [ "${code:-000}" -lt 200 ] || [ "${code:-000}" -ge 300 ]; then
@@ -886,7 +890,7 @@ proxy_group_select() {
     if [ -n "${response_body:-}" ]; then
       die "controller 原始错误：$response_body"
     fi
-    die "鑺傜偣鍒囨崲澶辫触锛歝ontroller 杩斿洖 HTTP $code"
+    die "节点切换失败：controller 返回 HTTP $code"
   fi
 
   rm -f "$response_file" 2>/dev/null || true
@@ -929,4 +933,87 @@ print_proxy_groups_summary() {
       echo "$group"
     fi
   done < <(proxy_group_list)
+}
+
+# ─── 代理模式管理 ──────────────────────────────────────────
+clash_mode_get() {
+  controller_curl GET "/configs" 2>/dev/null \
+    | "$(yq_bin)" -p=json eval '.mode // "rule"' - 2>/dev/null \
+    | head -n 1
+}
+
+clash_mode_set() {
+  local mode="$1"
+  case "$mode" in
+    global|rule|direct) ;;
+    *) die "不支持的代理模式：$mode（只允许 global / rule / direct）" ;;
+  esac
+  controller_curl PATCH "/configs" "{\"mode\":\"$mode\"}" >/dev/null
+}
+
+# ─── 节点延迟 ──────────────────────────────────────────────
+proxy_node_url_encode() {
+  printf '%s' "$1" | sed 's| |%20|g; s|#|%23|g; s|&|%26|g; s|+|%2B|g; s|?|%3F|g'
+}
+
+proxy_node_test_delay() {
+  local node="$1"
+  local url="${2:-http://www.gstatic.com/generate_204}"
+  local timeout_ms="${3:-3000}"
+  local encoded_node
+
+  [ -n "${node:-}" ] || return 1
+  encoded_node="$(proxy_node_url_encode "$node")"
+
+  controller_curl GET "/proxies/${encoded_node}/delay?timeout=${timeout_ms}&url=${url}" 2>/dev/null \
+    | "$(yq_bin)" -p=json eval '.delay // 0' - 2>/dev/null \
+    | head -n 1
+}
+
+proxy_group_nodes_delay_map() {
+  # 单次 API 调用，输出每行格式：nodename\tdelayms（0 表示无历史记录）
+  # 使用 tab 分隔，避免节点名含 | 导致解析错误
+  local group="$1"
+  [ -n "${group:-}" ] || return 1
+
+  GROUP="$group" proxy_groups_json 2>/dev/null \
+    | GROUP="$group" "$(yq_bin)" -p=json eval '
+        . as $root |
+        (.proxies | to_entries | .[] | select(.key == env(GROUP)) | .value.all // []) | .[] |
+        . as $n |
+        $n + "\t" + (
+          ($root.proxies[$n].history | select(length > 0) | .[-1].delay // 0) // 0 |
+          tostring
+        )
+      ' - 2>/dev/null
+}
+
+# ─── 活跃连接 ──────────────────────────────────────────────
+connections_json() {
+  controller_curl GET "/connections"
+}
+
+connections_count() {
+  connections_json 2>/dev/null \
+    | "$(yq_bin)" -p=json eval '.connections | length' - 2>/dev/null \
+    | head -n 1 \
+    || echo "0"
+}
+
+connections_format_rows() {
+  local limit="${1:-100}"
+  connections_json 2>/dev/null \
+    | "$(yq_bin)" -p=json eval "
+        .connections[0:${limit}][] |
+        [
+          ((.metadata.host // .metadata.destinationIP // \"-\") | .[0:36]),
+          ((.metadata.type // .metadata.network // \"-\")),
+          ((.chains // []) | reverse | join(\"→\") | .[0:28]),
+          (.rule // \"-\"),
+          (
+            (((.download // 0) / 1024 | tostring | split(".")[0]) + \"K↓\") + \" \" +
+            (((.upload   // 0) / 1024 | tostring | split(".")[0]) + \"K↑\")
+          )
+        ] | join(\"\t\")
+      " - 2>/dev/null
 }

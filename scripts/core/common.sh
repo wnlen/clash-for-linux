@@ -2841,6 +2841,88 @@ install_runtime_brief_line() {
   esac
 }
 
+# ─── TUI 安装 ──────────────────────────────────────────────
+install_gum() {
+  local arch
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64)  arch="amd64" ;;
+    aarch64) arch="arm64" ;;
+    armv7*)  arch="armv7" ;;
+    *)       echo "❗ 不支持的架构：$arch，请手动安装 gum"; return 1 ;;
+  esac
+
+  local version="0.14.5"
+  local tmp_deb
+  tmp_deb="$(mktemp --suffix=.deb 2>/dev/null || mktemp)"
+
+  if command -v apt-get >/dev/null 2>&1; then
+    local url="https://github.com/charmbracelet/gum/releases/download/v${version}/gum_${version}_${arch}.deb"
+    echo "📥 正在下载 gum v${version} (${arch})..."
+    if curl -fsSL -o "$tmp_deb" "$url"; then
+      dpkg -i "$tmp_deb" >/dev/null 2>&1 || apt-get install -f -y >/dev/null 2>&1
+      rm -f "$tmp_deb" 2>/dev/null || true
+    else
+      rm -f "$tmp_deb" 2>/dev/null || true
+      echo "❗ 下载失败，请手动安装 gum"
+      return 1
+    fi
+  elif command -v yum >/dev/null 2>&1 || command -v dnf >/dev/null 2>&1; then
+    local url="https://github.com/charmbracelet/gum/releases/download/v${version}/gum_${version}_${arch}.rpm"
+    echo "📥 正在下载 gum v${version} (${arch})..."
+    if curl -fsSL -o "$tmp_deb" "$url"; then
+      rpm -i "$tmp_deb" >/dev/null 2>&1 || true
+      rm -f "$tmp_deb" 2>/dev/null || true
+    else
+      rm -f "$tmp_deb" 2>/dev/null || true
+      echo "❗ 下载失败，请手动安装 gum"
+      return 1
+    fi
+  elif command -v pacman >/dev/null 2>&1; then
+    pacman -S --noconfirm gum 2>/dev/null || { echo "❗ 安装失败，请手动安装 gum"; return 1; }
+  elif command -v apk >/dev/null 2>&1; then
+    apk add --no-cache gum 2>/dev/null || { echo "❗ 安装失败，请手动安装 gum"; return 1; }
+  else
+    echo "❗ 未检测到支持的包管理器，请手动安装 gum"
+    echo "   见 https://github.com/charmbracelet/gum#installation"
+    return 1
+  fi
+
+  if command -v gum >/dev/null 2>&1; then
+    echo "✅ gum 安装成功"
+    return 0
+  else
+    echo "❗ gum 安装失败"
+    return 1
+  fi
+}
+
+prompt_install_tui() {
+  if command -v gum >/dev/null 2>&1; then
+    echo "🖥️  TUI 依赖已就绪（gum $(gum --version 2>/dev/null || echo '?')）"
+    return 0
+  fi
+
+  echo
+  echo "🖥️  Clash TUI 控制台需要安装 gum（Charm 出品的终端 UI 工具）"
+  echo "   安装后可通过 clashctl tui 进入交互式控制台"
+  echo
+  printf "   是否安装 gum？[Y/n] "
+  local answer
+  read -r answer 2>/dev/null || answer=""
+  case "${answer:-Y}" in
+    [Yy]|[Yy][Ee][Ss]|"")
+      echo
+      install_gum || true
+      ;;
+    *)
+      echo
+      echo "⏭️  已跳过 TUI 安装，后续可手动安装 gum"
+      echo "   见 https://github.com/charmbracelet/gum#installation"
+      ;;
+  esac
+}
+
 print_install_summary() {
   local clashctl_file
   local kernel_text project_path arch_text install_actor install_scope_text
