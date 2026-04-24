@@ -9,6 +9,7 @@ source "$PROJECT_DIR/scripts/core/runtime.sh"
 source "$PROJECT_DIR/scripts/core/config.sh"
 source "$PROJECT_DIR/scripts/core/proxy.sh"
 source "$PROJECT_DIR/scripts/core/update.sh"
+source "$PROJECT_DIR/scripts/core/tui.sh"
 source "$PROJECT_DIR/scripts/init/systemd.sh"
 source "$PROJECT_DIR/scripts/init/systemd-user.sh"
 source "$PROJECT_DIR/scripts/init/script.sh"
@@ -33,6 +34,7 @@ Usage:
   ls                             📡 查看订阅列表
 
 🕹️  Control:
+  tui                            🖥️  TUI 交互式控制台（需要 gum）
   clashui                        🕹️  查看 Web 控制台
   secret                         🔑 查看或设置 Web 密钥
   clashsecret                    🔑 查看或设置 Web 密钥
@@ -7196,6 +7198,7 @@ case "$cmd" in
   proxy)          cmd_proxy "$@" ;;
   upgrade)        cmd_upgrade "$@" ;;
   update)         cmd_update "$@" ;;
+  tui)            cmd_tui "$@" ;;
   start-direct)   cmd_start_direct "$@" ;;
   stop-direct)    cmd_stop_direct "$@" ;;
   restart-direct) cmd_restart_direct "$@" ;;
