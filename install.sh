@@ -30,6 +30,7 @@ mark_install_plan || true
 mark_install_port_plan || true
 
 install_clashctl_entry
+install_clashctl_completion
 install_shell_alias_entry
 install_runtime_entry
 install_local_dashboard_assets

@@ -7,6 +7,7 @@ PROJECT_DIR="$(cd "$(dirname "$SCRIPT_PATH")/../.." && pwd)"
 source "$PROJECT_DIR/scripts/core/common.sh"
 source "$PROJECT_DIR/scripts/core/runtime.sh"
 source "$PROJECT_DIR/scripts/core/config.sh"
+source "$PROJECT_DIR/scripts/core/completion.sh"
 source "$PROJECT_DIR/scripts/core/proxy.sh"
 source "$PROJECT_DIR/scripts/core/update.sh"
 source "$PROJECT_DIR/scripts/core/tui.sh"
@@ -44,6 +45,7 @@ Usage:
   status                         🔍️ 查看状态总览
   boot                           🚦 管理开机代理接管
   log/logs                       📜 查看日志
+  completion                     💡 导出 Bash / Zsh 补全脚本
 
 💡 更多高级能力：clashctl help advanced
 EOF
@@ -73,6 +75,7 @@ usage_advanced() {
   boot proxy on|off|status           📜 仅管理开机代理保持
   upgrade                        🚀 升级当前或指定内核
   update                         🔄 更新项目代码
+  completion bash|zsh            💡 导出 Shell 补全脚本
   dev reset                      🧪 恢复到安装前状态（保留项目目录和已下载文件）
 
 📌 Advanced Examples:
@@ -1565,6 +1568,66 @@ print_config_kernel_feedback() {
   ui_blank
 }
 
+tun_container_runtime_hint_lines() {
+  local env_type os_variant cap_check printed="false"
+
+  env_type="$(container_env_type 2>/dev/null || echo unknown)"
+  os_variant="$(install_env_os_variant 2>/dev/null || true)"
+  cap_check="$(has_cap_net_admin; echo $?)"
+
+  if [ "$env_type" = "docker" ]; then
+    if ! tun_device_exists 2>/dev/null || [ "$cap_check" != "0" ]; then
+      echo "👉 当前问题来自容器启动参数；仅在容器内执行 sudo 或切换到 root，无法补齐缺失的 device / capability"
+      printed="true"
+    fi
+  fi
+
+  if ! tun_device_exists 2>/dev/null; then
+    if [ "$env_type" = "docker" ]; then
+      echo "👉 请重新创建 Docker 容器并挂载 Tun 设备：--device /dev/net/tun"
+    else
+      echo "👉 请在容器启动时映射 Tun 设备；Docker 示例：--device /dev/net/tun"
+    fi
+    printed="true"
+  fi
+
+  case "$cap_check" in
+    0)
+      ;;
+    2)
+      if [ "$env_type" = "docker" ]; then
+        echo "👉 当前容器内缺少 capsh，无法确认 CAP_NET_ADMIN；请重点检查启动参数是否包含：--cap-add NET_ADMIN"
+      else
+        echo "👉 无法确认 CAP_NET_ADMIN（缺少 capsh）；请检查容器启动参数是否授予了该 capability"
+      fi
+      printed="true"
+      ;;
+    *)
+      if [ "$env_type" = "docker" ]; then
+        echo "👉 请重新创建 Docker 容器并增加能力：--cap-add NET_ADMIN"
+      else
+        echo "👉 请在容器启动时授予网络管理能力；Docker 示例：--cap-add NET_ADMIN"
+      fi
+      printed="true"
+      ;;
+  esac
+
+  if ! has_ip_command 2>/dev/null; then
+    case "$os_variant" in
+      openwrt)
+        echo "👉 当前环境缺少 ip 命令；OpenWrt 可安装：opkg update && opkg install ip-full"
+        ;;
+      *)
+        echo "👉 当前环境缺少 ip 命令；Debian/Ubuntu 可安装：apt update && apt install -y iproute2"
+        echo "👉 其他发行版请安装提供 ip 命令的 iproute / iproute2 软件包"
+        ;;
+    esac
+    printed="true"
+  fi
+
+  [ "$printed" = "true" ]
+}
+
 print_tun_container_gate_feedback() {
   local mode="$1"
   local reason="${2:-}"
@@ -1589,7 +1652,8 @@ print_tun_container_gate_feedback() {
       ui_kv "💻" "环境模式" "容器环境"
       ui_kv "❗" "容器裁决" "高风险，已阻断开启"
       [ -n "${reason:-}" ] && ui_kv "❗" "阻断原因" "$reason"
-      ui_next "clashctl tun doctor"
+      tun_container_runtime_hint_lines | sed 's/^/  /' || true
+      ui_next "查看完整诊断：clashctl tun doctor"
       ui_blank
       ;;
     *)
@@ -2917,6 +2981,7 @@ cmd_ui_help_summary() {
   printf '  %-18s %s\n' "clashctl sub" "🧩 订阅高级管理（启用 / 禁用 / 重命名 / 删除）"
   printf '  %-18s %s\n' "clashctl upgrade" "🚀 升级当前或指定内核"
   printf '  %-18s %s\n' "clashctl update" "🔄 更新项目代码"
+  printf '  %-18s %s\n' "clashctl completion" "💡 导出 Bash / Zsh 补全脚本"
   echo "📜 日志"
   printf '  %-18s %s\n' "clashctl doctor" "🩺 诊断面板"
   printf '  %-18s %s\n' "clashctl log/logs" "📜 查看日志"
@@ -5456,31 +5521,51 @@ tun_doctor_action_lines() {
 
   case "$reason" in
     missing-cap-net-admin)
-      case "$backend" in
-        systemd)
-          echo "👉 当前运行后端为 systemd；若关键证据显示 unit 未声明能力，可尝试为服务显式补 CAP_NET_ADMIN / CAP_NET_RAW："
-          echo "   sudo systemctl edit $unit"
-          ;;
-        systemd-user)
-          echo "👉 当前运行后端为 systemd-user；请结合容器与 unit 证据判断，必要时改用系统服务或显式补 CAP_NET_ADMIN / CAP_NET_RAW"
-          ;;
-        script)
-          echo "👉 当前运行后端为 script；请确认启动 mihomo 的实际进程具备 CAP_NET_ADMIN / CAP_NET_RAW："
-          echo "   sudo clashctl tun on"
-          ;;
-        *)
-          echo "👉 请结合运行后端、容器环境和进程能力证据，确认 mihomo 实际拥有 CAP_NET_ADMIN / CAP_NET_RAW"
-          ;;
-      esac
+      if [ "$(container_env_type 2>/dev/null || echo unknown)" != "host" ]; then
+        tun_container_runtime_hint_lines || true
+      else
+        case "$backend" in
+          systemd)
+            echo "👉 当前运行后端为 systemd；若关键证据显示 unit 未声明能力，可尝试为服务显式补 CAP_NET_ADMIN / CAP_NET_RAW："
+            echo "   sudo systemctl edit $unit"
+            ;;
+          systemd-user)
+            echo "👉 当前运行后端为 systemd-user；请结合容器与 unit 证据判断，必要时改用系统服务或显式补 CAP_NET_ADMIN / CAP_NET_RAW"
+            ;;
+          script)
+            echo "👉 当前运行后端为 script；请确认启动 mihomo 的实际进程具备 CAP_NET_ADMIN / CAP_NET_RAW"
+            echo "👉 若当前就是主机脚本模式，可尝试提升权限后重新执行：sudo clashctl tun on"
+            ;;
+          *)
+            echo "👉 请结合运行后端、容器环境和进程能力证据，确认 mihomo 实际拥有 CAP_NET_ADMIN / CAP_NET_RAW"
+            ;;
+        esac
+      fi
       ;;
     missing-tun-device)
-      echo "👉 请先挂载或启用 /dev/net/tun"
+      if [ "$(container_env_type 2>/dev/null || echo unknown)" != "host" ]; then
+        tun_container_runtime_hint_lines || true
+      else
+        echo "👉 请先挂载或启用 /dev/net/tun"
+      fi
       ;;
     tun-device-not-readable)
       echo "👉 请修复 /dev/net/tun 权限，确保当前运行用户可读写"
       ;;
     missing-ip-command)
-      echo "👉 请先安装 iproute2，确保 ip 命令可用"
+      if [ "$(container_env_type 2>/dev/null || echo unknown)" != "host" ]; then
+        tun_container_runtime_hint_lines || true
+      else
+        case "$(install_env_os_variant 2>/dev/null || true)" in
+          openwrt)
+            echo "👉 当前环境缺少 ip 命令；OpenWrt 可安装：opkg update && opkg install ip-full"
+            ;;
+          *)
+            echo "👉 Debian/Ubuntu 可安装：apt update && apt install -y iproute2"
+            echo "👉 其他发行版请安装提供 ip 命令的 iproute / iproute2 软件包"
+            ;;
+        esac
+      fi
       ;;
     runtime-not-running)
       echo "👉 请先启动代理：clashon"
@@ -5594,11 +5679,9 @@ tun_recommendation_lines() {
   if [ "$can_enable" != "true" ]; then
     case "$container_mode" in
       container-risky)
-        echo "1. 当前容器环境已被裁决为高风险：${risk_reason:-容器条件不足}"
-        echo "2. 检查宿主机是否映射 /dev/net/tun"
-        echo "3. 检查是否授予 CAP_NET_ADMIN / --cap-add=NET_ADMIN"
-        echo "4. 检查容器内是否具备 ip 命令"
-        echo "5. 条件满足后再执行：clashctl tun on"
+        echo "👉 当前容器环境已被裁决为高风险：${risk_reason:-容器条件不足}"
+        tun_container_runtime_hint_lines || true
+        echo "👉 条件满足后再执行：clashctl tun on"
         ;;
       *)
         echo "1. 当前环境不满足 Tun 基础条件"
@@ -5624,9 +5707,9 @@ tun_recommendation_lines() {
       return 0
       ;;
     container-risky)
-      echo "1. 当前容器环境属于高风险，不建议直接开启 Tun"
-      echo "2. 先修复：${risk_reason:-容器条件不足}"
-      echo "3. 修复后再执行：clashctl tun on"
+      echo "👉 当前容器环境属于高风险，不建议直接开启 Tun：${risk_reason:-容器条件不足}"
+      tun_container_runtime_hint_lines || true
+      echo "👉 修复后再执行：clashctl tun on"
       return 0
       ;;
   esac
@@ -6881,13 +6964,13 @@ print_select_feedback() {
 
   current="$(proxy_group_current_display "$group" 2>/dev/null || true)"
 
-  ui_title "馃殌 鑺傜偣鍒囨崲瀹屾垚"
+  ui_title "🚀 节点切换完成"
 
   if [ -n "${group:-}" ]; then
-    ui_kv "馃摝" "宸插垏鎹㈢瓥鐣ョ粍" "$group"
+    ui_kv "📦" "已切换策略组" "$group"
   fi
 
-  ui_kv "馃殌" "褰撳墠鑺傜偣" "${current:-<unknown>}"
+  ui_kv "🚀" "当前节点" "${current:-<unknown>}"
 
   main_feedback_runtime_state
   ui_next "clashctl status"
@@ -6905,12 +6988,12 @@ status_current_proxy_brief() {
       return 0
     fi
 
-    echo "鏈惎鍔?"
+    echo "未启动"
     return 0
   fi
 
   if ! proxy_controller_reachable 2>/dev/null; then
-    echo "鎺у埗鍣ㄤ笉鍙闂?"
+    echo "控制器不可访问"
     return 0
   fi
 
@@ -6928,7 +7011,7 @@ status_current_proxy_brief() {
     return 0
   fi
 
-  echo "鏆傛棤鍙垏鎹㈢瓥鐣ョ粍"
+  echo "暂无可切换策略组"
 }
 
 cmd_proxy_groups() {
@@ -6937,25 +7020,25 @@ cmd_proxy_groups() {
   prepare
 
   if ! status_is_running; then
-    die_state "浠ｇ悊鍐呮牳鏈繍琛?" "clashon"
+    die_state "代理内核未运行" "clashon"
   fi
 
   if ! proxy_controller_reachable 2>/dev/null; then
-    die_state "鎺у埗鍣ㄤ笉鍙闂?" "clashctl doctor"
+    die_state "控制器不可访问" "clashctl doctor"
   fi
 
-  ui_title "馃摝 绛栫暐缁勫垪琛?"
-  echo "  馃摝 鍚嶇О                 绫诲瀷         褰撳墠鑺傜偣"
+  ui_title "📦 策略组列表"
+  echo "  📦 名称                 类型         当前节点"
   while IFS= read -r group; do
     [ -n "${group:-}" ] || continue
     found="true"
     type="$(proxy_group_type "$group" 2>/dev/null || echo "unknown")"
     current="$(proxy_group_current_display "$group" 2>/dev/null || true)"
-    printf '  馃摝 %-20s %-12s %s\n' "$group" "$type" "${current:-<unknown>}"
+    printf '  📦 %-20s %-12s %s\n' "$group" "$type" "${current:-<unknown>}"
   done < <(proxy_group_list)
 
   if [ "$found" != "true" ]; then
-    echo "  馃摥 鏆傛棤鍙垏鎹㈢瓥鐣ョ粍"
+    echo "  📭 暂无可切换策略组"
   fi
 
   ui_blank
@@ -6969,33 +7052,33 @@ cmd_proxy_current() {
   prepare
 
   if ! status_is_running; then
-    die_state "浠ｇ悊鍐呮牳鏈繍琛?" "clashon"
+    die_state "代理内核未运行" "clashon"
   fi
 
   if ! proxy_controller_reachable 2>/dev/null; then
-    die_state "鎺у埗鍣ㄤ笉鍙闂?" "clashctl doctor"
+    die_state "控制器不可访问" "clashctl doctor"
   fi
 
   if [ -n "${1:-}" ]; then
     group="$1"
     current="$(proxy_group_current_display "$group" 2>/dev/null || true)"
-    ui_title "馃殌 褰撳墠鑺傜偣"
-    ui_kv "馃摝" "绛栫暐缁?" "$group"
-    ui_kv "馃殌" "褰撳墠鑺傜偣" "${current:-<unknown>}"
+    ui_title "🚀 当前节点"
+    ui_kv "📦" "策略组" "$group"
+    ui_kv "🚀" "当前节点" "${current:-<unknown>}"
     ui_blank
     return 0
   fi
 
-  ui_title "馃殌 褰撳墠鑺傜偣鎬昏"
+  ui_title "🚀 当前节点总览"
   while IFS= read -r group; do
     [ -n "${group:-}" ] || continue
     found="true"
     current="$(proxy_group_current_display "$group" 2>/dev/null || true)"
-    printf '  馃殌 %-20s %s\n' "$group" "${current:-<unknown>}"
+    printf '  🚀 %-20s %s\n' "$group" "${current:-<unknown>}"
   done < <(proxy_group_list)
 
   if [ "$found" != "true" ]; then
-    echo "  馃摥 鏆傛棤鍙垏鎹㈢瓥鐣ョ粍"
+    echo "  📭 暂无可切换策略组"
   fi
 
   ui_blank
@@ -7006,35 +7089,35 @@ cmd_proxy_nodes() {
   local current node found="false"
 
   prepare
-  [ -n "${group:-}" ] || die "璇蜂娇鐢?clashctl select 鍒囨崲鑺傜偣"
+  [ -n "${group:-}" ] || die "请使用 clashctl select 切换节点"
 
   if ! status_is_running; then
-    die_state "浠ｇ悊鍐呮牳鏈繍琛?" "clashon"
+    die_state "代理内核未运行" "clashon"
   fi
 
   if ! proxy_controller_reachable 2>/dev/null; then
-    die_state "鎺у埗鍣ㄤ笉鍙闂?" "clashctl doctor"
+    die_state "控制器不可访问" "clashctl doctor"
   fi
 
   current="$(proxy_group_current_display "$group" 2>/dev/null || true)"
 
-  ui_title "馃殌 鍊欓€夎妭鐐瑰垪琛?"
-  ui_kv "馃摝" "绛栫暐缁?" "$group"
-  ui_kv "馃殌" "褰撳墠鑺傜偣" "${current:-<unknown>}"
+  ui_title "🚀 候选节点列表"
+  ui_kv "📦" "策略组" "$group"
+  ui_kv "🚀" "当前节点" "${current:-<unknown>}"
   ui_blank
 
   while IFS= read -r node; do
     [ -n "${node:-}" ] || continue
     found="true"
     if [ "$node" = "$current" ]; then
-      printf '  * 馃殌 %s\n' "$node"
+      printf '  * 🚀 %s\n' "$node"
     else
-      printf '    馃殌 %s\n' "$node"
+      printf '    🚀 %s\n' "$node"
     fi
   done < <(proxy_group_selectable_nodes "$group")
 
   if [ "$found" != "true" ]; then
-    echo "  馃摥 该策略组暂无可切换真实节点"
+    echo "  📭 该策略组暂无可切换真实节点"
   fi
 
   ui_blank
@@ -7052,7 +7135,7 @@ proxy_pick_group_for_select() {
     groups+=("$group")
   done < <(proxy_group_display_list)
 
-  for group in "鑺傜偣閫夋嫨" "鑷姩閫夋嫨"; do
+  for group in "节点选择" "自动选择"; do
     if printf '%s\n' "${groups[@]}" | grep -Fxq "$group"; then
       ordered_groups+=("$group")
     fi
@@ -7060,7 +7143,7 @@ proxy_pick_group_for_select() {
 
   for group in "${groups[@]}"; do
     case "$group" in
-      鑺傜偣閫夋嫨|鑷姩閫夋嫨)
+      节点选择|自动选择)
         continue
         ;;
     esac
@@ -7070,18 +7153,18 @@ proxy_pick_group_for_select() {
   groups=("${ordered_groups[@]}")
 
   count="${#groups[@]}"
-  [ "$count" -gt 0 ] || die "馃摥 鏆傛棤鍙垏鎹㈢瓥鐣ョ粍"
+  [ "$count" -gt 0 ] || die "📭 暂无可切换策略组"
 
-  echo "馃摝 璇烽€夋嫨绛栫暐缁勶細" >&2
-  echo "馃挕 閫氬父浼樺厛閫夋嫨锛氳妭鐐归€夋嫨" >&2
+  echo "📦 请选择策略组：" >&2
+  echo "💡 通常优先选择：节点选择" >&2
   idx=1
   for group in "${groups[@]}"; do
     current="$(proxy_group_current_display "$group" 2>/dev/null || true)"
     type="$(proxy_group_type_label "$group" 2>/dev/null || echo "unknown")"
-    printf '  %s) 馃摝 %s [%s]  ->  馃殌 %s\n' "$idx" "$group" "$type" "${current:-<unknown>}" >&2
+    printf '  %s) 📦 %s [%s]  ->  🚀 %s\n' "$idx" "$group" "$type" "${current:-<unknown>}" >&2
     idx=$((idx + 1))
   done
-  echo "  q) 閫€鍑?" >&2
+  echo "  q) 退出" >&2
   echo >&2
 
   idx="$(proxy_pick_index "$count")" || return 1
@@ -7097,15 +7180,15 @@ proxy_select_interactive_guarded() {
   prepare
 
   if ! status_is_running; then
-    die_state "浠ｇ悊鍐呮牳鏈繍琛?" "clashon"
+    die_state "代理内核未运行" "clashon"
   fi
 
   if ! proxy_controller_reachable 2>/dev/null; then
-    die_state "鎺у埗鍣ㄤ笉鍙闂?" "clashctl doctor"
+    die_state "控制器不可访问" "clashctl doctor"
   fi
 
   if [ -z "${group:-}" ]; then
-    ui_title "馃殌 鑺傜偣鍒囨崲"
+    ui_title "🚀 节点切换"
     choose_group="true"
   fi
 
@@ -7114,7 +7197,7 @@ proxy_select_interactive_guarded() {
       group="$(proxy_pick_group_for_select)" || return 0
     fi
 
-    proxy_group_exists "$group" || die "绛栫暐缁勪笉瀛樺湪锛?group"
+    proxy_group_exists "$group" || die "策略组不存在：$group"
 
     current="$(proxy_group_current_display "$group" 2>/dev/null || true)"
     nodes=()
@@ -7126,8 +7209,8 @@ proxy_select_interactive_guarded() {
     count="${#nodes[@]}"
     if [ "$count" -le 0 ]; then
       ui_warn "该策略组暂无可切换真实节点"
-      ui_kv "馃摝" "绛栫暐缁?" "$group"
-      ui_kv "馃殌" "褰撳墠鑺傜偣" "${current:-<unknown>}"
+      ui_kv "📦" "策略组" "$group"
+      ui_kv "🚀" "当前节点" "${current:-<unknown>}"
       ui_blank
       if [ "$choose_group" = "true" ]; then
         group=""
@@ -7139,25 +7222,25 @@ proxy_select_interactive_guarded() {
     total_count="$(select_total_node_count 2>/dev/null || true)"
 
     echo
-    echo "馃摝 褰撳墠绛栫暐缁勶細$group"
-    echo "馃殌 褰撳墠鑺傜偣锛?${current:-<unknown>}"
-    echo "馃摝 褰撳墠绛栫暐缁勫€欓€夋暟锛?count"
-    [ -n "${total_count:-}" ] && echo "馃敘 鍏ㄩ儴鑺傜偣鎬绘暟锛?total_count"
-    echo "鈩癸笍 浠ヤ笅浠呮樉绀哄綋鍓嶇瓥鐣ョ粍鍙垏鎹㈣妭鐐?"
+    echo "📦 当前策略组：$group"
+    echo "🚀 当前节点：${current:-<unknown>}"
+    echo "📦 当前策略组候选数：$count"
+    [ -n "${total_count:-}" ] && echo "🔢 全部节点总数：$total_count"
+    echo "ℹ️ 以下仅显示当前策略组可切换节点"
     echo
-    echo "馃殌 璇烽€夋嫨鑺傜偣锛?"
+    echo "🚀 请选择节点："
 
     idx=1
     for node in "${nodes[@]}"; do
       if [ "$node" = "$current" ]; then
-        printf '  %s) 馃殌 %s [褰撳墠]\n' "$idx" "$node"
+        printf '  %s) 🚀 %s [当前]\n' "$idx" "$node"
       else
-        printf '  %s) 馃殌 %s\n' "$idx" "$node"
+        printf '  %s) 🚀 %s\n' "$idx" "$node"
       fi
       idx=$((idx + 1))
     done
 
-    echo "  q) 閫€鍑?"
+    echo "  q) 退出"
     echo
 
     idx="$(proxy_pick_index "$count")" || return 0
@@ -7199,6 +7282,7 @@ case "$cmd" in
   upgrade)        cmd_upgrade "$@" ;;
   update)         cmd_update "$@" ;;
   tui)            cmd_tui "$@" ;;
+  completion)     cmd_completion "$@" ;;
   start-direct)   cmd_start_direct "$@" ;;
   stop-direct)    cmd_stop_direct "$@" ;;
   restart-direct) cmd_restart_direct "$@" ;;

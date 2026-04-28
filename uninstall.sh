@@ -41,6 +41,7 @@ detect_install_scope auto
 service_stop || true
 remove_runtime_entry || true
 remove_clashctl_entry || true
+remove_clashctl_completion || true
 remove_shell_alias_entry || true
 clear_shell_proxy_persist_state || true
 

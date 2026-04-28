@@ -1,4 +1,4 @@
-*.sh text eol=lf
+*.sh text eol=lf working-tree-encoding=UTF-8
 *.yaml text eol=lf
 *.yml text eol=lf
 *.env text eol=lf

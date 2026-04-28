@@ -2307,6 +2307,30 @@ alias_source_file() {
   echo "$PROJECT_DIR/scripts/core/alias.sh"
 }
 
+completion_dir() {
+  if [ "$INSTALL_SCOPE" = "system" ]; then
+    echo "/etc/profile.d"
+  else
+    echo "$HOME/.config/clash-for-linux"
+  fi
+}
+
+bash_completion_entry_file() {
+  if [ "$INSTALL_SCOPE" = "system" ]; then
+    echo "$(completion_dir)/clash-for-linux-completion.bash"
+  else
+    echo "$(completion_dir)/completion.bash"
+  fi
+}
+
+zsh_completion_entry_file() {
+  if [ "$INSTALL_SCOPE" = "system" ]; then
+    echo "$(completion_dir)/clash-for-linux-completion.zsh"
+  else
+    echo "$(completion_dir)/completion.zsh"
+  fi
+}
+
 clashctl_entry_target() {
   echo "$(command_install_dir)/clashctl"
 }
@@ -2411,12 +2435,14 @@ cleanup_legacy_shell_entries() {
 }
 
 install_shell_alias_entry() {
-  local profile_file alias_file shell_rc
+  local profile_file alias_file shell_rc bash_completion_file zsh_completion_file
 
   cleanup_legacy_shell_entries
 
   profile_file="$(profile_entry_file)"
   alias_file="$(alias_source_file)"
+  bash_completion_file="$(bash_completion_entry_file)"
+  zsh_completion_file="$(zsh_completion_entry_file)"
 
   mkdir -p "$(dirname "$profile_file")"
   [ -f "$alias_file" ] || die "未找到 alias 脚本：$alias_file"
@@ -2430,6 +2456,18 @@ if [ -n "\${BASH_VERSION:-}" ] && [ -z "\${CLASH_FOR_LINUX_SHELL_LOADED:-}" ]; t
   export CLASH_FOR_LINUX_SHELL_LOADED="1"
   source "$alias_file"
 fi
+
+case "\$-" in
+  *i*)
+    if [ -n "\${BASH_VERSION:-}" ] && [ -z "\${CLASH_FOR_LINUX_BASH_COMPLETION_LOADED:-}" ] && [ -f "$bash_completion_file" ]; then
+      export CLASH_FOR_LINUX_BASH_COMPLETION_LOADED="1"
+      source "$bash_completion_file"
+    elif [ -n "\${ZSH_VERSION:-}" ] && [ -z "\${CLASH_FOR_LINUX_ZSH_COMPLETION_LOADED:-}" ] && [ -f "$zsh_completion_file" ]; then
+      export CLASH_FOR_LINUX_ZSH_COMPLETION_LOADED="1"
+      source "$zsh_completion_file"
+    fi
+    ;;
+esac
 EOF
   chmod +x "$profile_file"
 
@@ -2438,6 +2476,21 @@ EOF
   done
 
   install_alias_command_wrappers
+}
+
+install_clashctl_completion() {
+  local bash_target zsh_target
+
+  bash_target="$(bash_completion_entry_file)"
+  zsh_target="$(zsh_completion_entry_file)"
+
+  mkdir -p "$(dirname "$bash_target")"
+  mkdir -p "$(dirname "$zsh_target")"
+
+  bash "$PROJECT_DIR/scripts/core/clashctl.sh" completion bash > "$bash_target"
+  bash "$PROJECT_DIR/scripts/core/clashctl.sh" completion zsh > "$zsh_target"
+
+  chmod +x "$bash_target" "$zsh_target" 2>/dev/null || true
 }
 
 remove_clashctl_entry() {
@@ -2459,6 +2512,10 @@ remove_shell_alias_entry() {
       ' "$shell_rc" > "${shell_rc}.tmp" && mv "${shell_rc}.tmp" "$shell_rc"
     done
   fi
+}
+
+remove_clashctl_completion() {
+  rm -f "$(bash_completion_entry_file)" "$(zsh_completion_entry_file)" 2>/dev/null || true
 }
 
 install_has_subscription() {
