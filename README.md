@@ -1,35 +1,23 @@
 <h1 align="center">
-  🐧 Clash for Linux TUI
+  🐧 Clash for Linux</a>
   <br>
 </h1>
 
 <p align="center">
-  基于 <a href="https://github.com/wnlen/clash-for-linux">wnlen/clash-for-linux</a> 改进，新增交互式 TUI 仪表盘
+  💬 社区交流：<a href="https://t.me/+NsYaX9kzqERlNzZl">Telegram 群</a>
 </p>
 
 <h3 align="center">
 一个更完整、更优雅的 Linux Clash / <a href="https://github.com/MetaCubeX/mihomo">Mihomo</a> 运行平台。
 </h3>
-
 <p align="center">
   <img src="resources/shell.png" width="100%">
 </p>
 
-## 🔀 Fork 说明
 
-本项目 Fork 自 [wnlen/clash-for-linux](https://github.com/wnlen/clash-for-linux)，在原项目基础上新增了以下改进：
-
-- **交互式 TUI 仪表盘** — 基于 [gum](https://github.com/charmbracelet/gum) 构建的终端控制台，一条命令 `clashctl tui` 即可进入全功能可视化管理界面
-- **节点延迟测速** — 支持并发测速所有节点，实时显示延迟数据并按延迟排序
-- **节点名称 Unicode 兼容** — 修复了含 emoji / 中文的策略组和节点名在 API 调用中的编码问题
-
-> 上游仓库的所有功能均完整保留，TUI 为增量功能，不影响原有命令行操作方式。
-
-------
 
 # ✨ 核心特性
 
-- 🖥️ **TUI 仪表盘**：终端内全功能可视化控制台（`clashctl tui`）
 - 🚀 **自动识别系统架构**：自动下载并使用对应 Clash 内核
 - 🧪 **端口自动检测与分配**：避免冲突
 - 🔄 **多订阅管理**：可以保存多个订阅，通过 `clashctl use` 切换当前主订阅。
@@ -38,7 +26,7 @@
 - 🧠 **Mixin 机制**：可按需追加/覆盖 Clash 配置
 - 👤 **不同权限**：兼容 `root` 与普通用户环境。
 - 🔐 **安全默认配置**：自动生成或自定义 Secret
-- 🩺 **内置诊断工具（`doctor`）**：快速排障
+- 🩺 **内置诊断工具（`doctor`）**：快速排障 
 
 ### 适用场景
 
@@ -47,8 +35,6 @@
 - 路由 / 轻量系统（OpenWrt / NAS / 小主机 x86 / ARM）
 - 需要稳定访问 GitHub、Go / Node / Docker 生态的开发者
 - 不希望手动维护 Clash 运行状态的用户
-
-------
 
 # 🖥️ TUI 仪表盘
 
@@ -202,15 +188,13 @@ go install github.com/charmbracelet/gum@latest
 
 > 如果未安装 gum，其他所有命令行功能仍然完全可用，仅 `clashctl tui` 不可用。
 
-------
-
 # 🚀 一键安装（推荐）
 
 在终端中执行以下命令即可完成安装：
 
 ```
-git clone --branch master --depth 1 https://ghfast.top/https://github.com/Babylonehy/clash-for-linux-tui.git
-cd clash-for-linux-tui
+git clone --branch master --depth 1 https://ghfast.top/https://github.com/wnlen/clash-for-linux.git
+cd clash-for-linux
 bash install.sh
 ```
 
@@ -226,7 +210,6 @@ bash install.sh
 〽️ 常用命令
   clashon              🚀 开启代理
   clashoff             ⛔ 关闭代理
-  clashctl tui         🖥️  TUI 控制台（新增）
   clashctl select      💫 选择节点
 🕹️  控制台
   clashui              🕹️  查看 Web 控制台
@@ -371,8 +354,8 @@ clashctl boot proxy on|off|status
 
 ```bash
 cd /root
-git clone --branch master --depth 1 https://ghfast.top/https://github.com/Babylonehy/clash-for-linux-tui.git
-cd clash-for-linux-tui
+git clone --branch master --depth 1 https://ghfast.top/https://github.com/wnlen/clash-for-linux.git
+cd clash-for-linux
 ```
 
 安装依赖：
@@ -408,7 +391,6 @@ OpenWrt 下 root/system 安装会把 `clashctl`、`clashon`、`clashoff` 等命�
 - `doctor`
 - `ui`
 - `select`
-- `tui`（新增）
 
 Control 层负责把常用动作收口成可理解的命令和反馈。
 
@@ -429,7 +411,7 @@ Control 层负责把常用动作收口成可理解的命令和反馈。
 
 `runtime/` 是运行时目录，不是配置目录。
 
-它的作用是作为"唯一运行容器"，用于存放：
+它的作用是作为“唯一运行容器”，用于存放：
 
 \- 运行内核（mihomo / clash）
 \- 运行配置（config.yaml）
@@ -675,8 +657,6 @@ chmod +x /etc/rc.local
 
 ## 🔗 引用
 
-- [clash-for-linux](https://github.com/wnlen/clash-for-linux) — 上游项目
-- [gum](https://github.com/charmbracelet/gum) — TUI 组件库
 - [clash](https://clash.wiki/)
 - [mihomo](https://github.com/MetaCubeX/mihomo)
 - [subconverter](https://github.com/asdlokj1qpi233/subconverter)
@@ -691,6 +671,9 @@ chmod +x /etc/rc.local
    目前此项目已集成自动识别和转换clash配置文件的功能。如果依然无法使用，则需要通过自建或者第三方平台（不推荐，有泄露风险）对订阅地址转换。
    
 3. 程序日志中出现`error: unsupported rule type RULE-SET`报错，解决方法查看官方[WIKI](https://github.com/Dreamacro/clash/wiki/FAQ#error-unsupported-rule-type-rule-set)
+## ⭐ Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=wnlen/clash-for-linux&type=Date)](https://star-history.com/#wnlen/clash-for-linux&Date)
 
 ## ⚠️ 特别声明
 
