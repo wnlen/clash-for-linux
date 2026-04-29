@@ -2992,6 +2992,165 @@ install_runtime_brief_line() {
   esac
 }
 
+gum_run_as_root() {
+  if [ "$(id -u 2>/dev/null || echo 1)" = "0" ]; then
+    "$@"
+    return $?
+  fi
+
+  if command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
+    return $?
+  fi
+
+  echo "❗ 安装 gum 需要 root 权限或 sudo：$*"
+  return 1
+}
+
+install_gum_with_apt() {
+  local key_tmp
+
+  command -v gpg >/dev/null 2>&1 || {
+    echo "❗ Debian/Ubuntu 安装 gum 需要 gpg，请先安装 gnupg"
+    return 1
+  }
+
+  key_tmp="$(mktemp)"
+  if ! curl_download -fsSL https://repo.charm.sh/apt/gpg.key -o "$key_tmp"; then
+    rm -f "$key_tmp" 2>/dev/null || true
+    echo "❗ 下载 Charm APT GPG key 失败"
+    return 1
+  fi
+
+  gum_run_as_root mkdir -p /etc/apt/keyrings || {
+    rm -f "$key_tmp" 2>/dev/null || true
+    return 1
+  }
+  gum_run_as_root gpg --batch --yes --dearmor -o /etc/apt/keyrings/charm.gpg "$key_tmp" || {
+    rm -f "$key_tmp" 2>/dev/null || true
+    echo "❗ 写入 Charm APT GPG key 失败"
+    return 1
+  }
+  rm -f "$key_tmp" 2>/dev/null || true
+
+  printf '%s\n' 'deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *' \
+    | gum_run_as_root tee /etc/apt/sources.list.d/charm.list >/dev/null || return 1
+
+  gum_run_as_root apt-get update || return 1
+  gum_run_as_root apt-get install -y gum
+}
+
+install_charm_yum_repo() {
+  local repo_tmp
+
+  command -v rpm >/dev/null 2>&1 || {
+    echo "❗ 安装 gum 需要 rpm 命令"
+    return 1
+  }
+
+  repo_tmp="$(mktemp)"
+  {
+    echo "[charm]"
+    echo "name=Charm"
+    echo "baseurl=https://repo.charm.sh/yum/"
+    echo "enabled=1"
+    echo "gpgcheck=1"
+    echo "gpgkey=https://repo.charm.sh/yum/gpg.key"
+  } > "$repo_tmp"
+
+  gum_run_as_root mkdir -p /etc/yum.repos.d || {
+    rm -f "$repo_tmp" 2>/dev/null || true
+    return 1
+  }
+  gum_run_as_root cp "$repo_tmp" /etc/yum.repos.d/charm.repo || {
+    rm -f "$repo_tmp" 2>/dev/null || true
+    return 1
+  }
+  rm -f "$repo_tmp" 2>/dev/null || true
+
+  gum_run_as_root rpm --import https://repo.charm.sh/yum/gpg.key
+}
+
+install_gum_with_yum_repo() {
+  local manager="$1"
+
+  install_charm_yum_repo || return 1
+  gum_run_as_root "$manager" install -y gum
+}
+
+install_gum() {
+  if command -v gum >/dev/null 2>&1; then
+    echo "🖥️  gum 已安装：$(gum --version 2>/dev/null || echo gum)"
+    return 0
+  fi
+
+  echo "🖥️  正在安装可选 TUI 依赖 gum..."
+
+  if command -v apt-get >/dev/null 2>&1; then
+    install_gum_with_apt
+  elif command -v dnf >/dev/null 2>&1; then
+    install_gum_with_yum_repo dnf
+  elif command -v yum >/dev/null 2>&1; then
+    install_gum_with_yum_repo yum
+  elif command -v pacman >/dev/null 2>&1; then
+    gum_run_as_root pacman -S --noconfirm gum
+  elif command -v apk >/dev/null 2>&1; then
+    gum_run_as_root apk add --no-cache gum
+  else
+    echo "❗ 未检测到支持的包管理器，请手动安装 gum"
+    echo "   见 https://github.com/charmbracelet/gum#installation"
+    return 1
+  fi
+
+  if command -v gum >/dev/null 2>&1; then
+    echo "✅ gum 安装成功：$(gum --version 2>/dev/null || echo gum)"
+    return 0
+  fi
+
+  echo "❗ gum 安装完成后仍不可用，请检查 PATH"
+  return 1
+}
+
+prompt_install_tui() {
+  case "${CLASH_INSTALL_GUM:-}" in
+    true|1|yes|YES|y|Y)
+      install_gum || true
+      return 0
+      ;;
+    false|0|no|NO|n|N)
+      return 0
+      ;;
+  esac
+
+  if command -v gum >/dev/null 2>&1; then
+    echo "🖥️  TUI 依赖已就绪（gum $(gum --version 2>/dev/null || echo '?')）"
+    return 0
+  fi
+
+  [ -t 0 ] || {
+    echo "🖥️  未安装可选 TUI 依赖 gum；需要时可运行：clashctl tui install-gum"
+    return 0
+  }
+
+  echo
+  echo "🖥️  可选 TUI 控制台需要 gum（Charm 出品的终端 UI 工具）"
+  echo "   安装后可通过 clashctl tui 进入交互式控制台"
+  printf "   是否现在安装 gum？[y/N] "
+
+  local answer
+  read -r answer 2>/dev/null || answer=""
+  case "${answer:-N}" in
+    [Yy]|[Yy][Ee][Ss])
+      echo
+      install_gum || true
+      ;;
+    *)
+      echo
+      echo "⏭️  已跳过 gum 安装，后续可运行：clashctl tui install-gum"
+      ;;
+  esac
+}
+
 print_install_summary() {
   local clashctl_file
   local kernel_text project_path arch_text install_actor install_scope_text

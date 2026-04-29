@@ -160,6 +160,19 @@ TUI 启动后会显示状态面板和功能菜单：
 
 TUI 依赖 [gum](https://github.com/charmbracelet/gum)（Charm 出品的终端 UI 工具）。gum 不是主安装依赖；未安装时仅 `clashctl tui` 不可用，`clashon`、`clashoff`、`clashctl select`、`status`、`doctor` 等命令不受影响。
 
+安装项目时会询问是否安装 gum，默认跳过；也可以安装后单独执行：
+
+```bash
+clashctl tui install-gum
+```
+
+非交互安装时可通过环境变量控制：
+
+```bash
+CLASH_INSTALL_GUM=true bash install.sh
+CLASH_INSTALL_GUM=false bash install.sh
+```
+
 ```bash
 # macOS
 brew install gum
@@ -180,6 +193,7 @@ baseurl=https://repo.charm.sh/yum/
 enabled=1
 gpgcheck=1
 gpgkey=https://repo.charm.sh/yum/gpg.key' | sudo tee /etc/yum.repos.d/charm.repo
+sudo rpm --import https://repo.charm.sh/yum/gpg.key
 sudo yum install gum
 
 # Go

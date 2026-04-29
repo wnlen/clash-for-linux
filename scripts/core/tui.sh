@@ -24,6 +24,7 @@ tui_ensure_gum() {
   echo "  Arch:    pacman -S gum"
   echo "  Nix:     nix-env -iA nixpkgs.gum"
   echo "  Go:      go install github.com/charmbracelet/gum@latest"
+  echo "  自动安装: clashctl tui install-gum"
   echo "  通用:    见 https://github.com/charmbracelet/gum#installation"
   echo
   exit 1
@@ -1369,6 +1370,13 @@ tui_latency_test() {
 }
 
 cmd_tui() {
+  case "${1:-}" in
+    install-gum|install-deps)
+      install_gum
+      return $?
+      ;;
+  esac
+
   prepare
   tui_ensure_gum
   tui_main_loop

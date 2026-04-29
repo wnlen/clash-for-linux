@@ -46,6 +46,7 @@ Usage:
 
 🕹️  Control:
   tui                            🖥️  TUI 交互式控制台（需要 gum）
+  tui install-gum                🧩 安装可选 TUI 依赖 gum
   clashui                        🕹️  查看 Web 控制台
   secret                         🔑 查看或设置 Web 密钥
   lan on|off|status              🏠 开启 / 关闭局域网代理
