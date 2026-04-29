@@ -10,6 +10,7 @@ source "$PROJECT_DIR/scripts/core/config.sh"
 source "$PROJECT_DIR/scripts/core/completion.sh"
 source "$PROJECT_DIR/scripts/core/proxy.sh"
 source "$PROJECT_DIR/scripts/core/update.sh"
+source "$PROJECT_DIR/scripts/core/tui.sh"
 source "$PROJECT_DIR/scripts/init/systemd.sh"
 source "$PROJECT_DIR/scripts/init/systemd-user.sh"
 source "$PROJECT_DIR/scripts/init/script.sh"
@@ -44,6 +45,7 @@ Usage:
   sub                            📡 订阅高级管理（启用 / 禁用 / 重命名 / 删除）
 
 🕹️  Control:
+  tui                            🖥️  TUI 交互式控制台（需要 gum）
   clashui                        🕹️  查看 Web 控制台
   secret                         🔑 查看或设置 Web 密钥
   lan on|off|status              🏠 开启 / 关闭局域网代理
@@ -7392,6 +7394,7 @@ case "$cmd" in
   upgrade)        cmd_upgrade "$@" ;;
   update)         cmd_update "$@" ;;
   completion)     cmd_completion "$@" ;;
+  tui)            cmd_tui "$@" ;;
   start-direct)   cmd_start_direct "$@" ;;
   stop-direct)    cmd_stop_direct "$@" ;;
   restart-direct) cmd_restart_direct "$@" ;;
