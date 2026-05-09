@@ -84,6 +84,53 @@ tui_pager() {
   gum pager --border-foreground "$TUI_MUTED"
 }
 
+clash_mode_get() {
+  controller_curl GET "/configs" 2>/dev/null \
+    | "$(yq_bin)" -p=json eval '.mode // "rule"' - 2>/dev/null \
+    | head -n 1
+}
+
+clash_mode_set() {
+  local mode="$1"
+
+  case "$mode" in
+    global|rule|direct) ;;
+    *) die "不支持的代理模式：$mode（只允许 global / rule / direct）" ;;
+  esac
+
+  controller_curl PATCH "/configs" "{\"mode\":\"$mode\"}" >/dev/null
+}
+
+connections_json() {
+  controller_curl GET "/connections"
+}
+
+connections_count() {
+  connections_json 2>/dev/null \
+    | "$(yq_bin)" -p=json eval '.connections | length' - 2>/dev/null \
+    | head -n 1 \
+    || echo "0"
+}
+
+connections_format_rows() {
+  local limit="${1:-100}"
+
+  connections_json 2>/dev/null \
+    | "$(yq_bin)" -p=json eval "
+        .connections[0:${limit}][] |
+        [
+          ((.metadata.host // .metadata.destinationIP // \"-\") | .[0:36]),
+          ((.metadata.type // .metadata.network // \"-\")),
+          ((.chains // []) | reverse | join(\"→\") | .[0:28]),
+          (.rule // \"-\"),
+          (
+            (((.download // 0) / 1024 | tostring | split(\".\")[0]) + \"K↓\") + \" \" +
+            (((.upload   // 0) / 1024 | tostring | split(\".\")[0]) + \"K↑\")
+          )
+        ] | join(\"\t\")
+      " - 2>/dev/null
+}
+
 # ─── 状态采集 ──────────────────────────────────────────────
 tui_collect_status() {
   load_system_state 2>/dev/null || true
