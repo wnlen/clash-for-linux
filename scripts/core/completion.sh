@@ -294,7 +294,7 @@ _clash_for_linux_complete_completion() {
   COMPREPLY=()
 
   if [ "$rel_index" -eq 1 ]; then
-    _clash_for_linux_add_matches "$cur" bash zsh
+    _clash_for_linux_add_matches "$cur" bash zsh fish
   fi
 }
 
@@ -416,6 +416,230 @@ EOF
   completion_emit_script_body
 }
 
+completion_emit_fish_script() {
+  printf 'set -g _clash_for_linux_project_dir %q\n' "$PROJECT_DIR"
+  cat <<'EOF'
+set -g _clash_for_linux_runtime_dir "$_clash_for_linux_project_dir/runtime"
+set -g _clash_for_linux_subscription_file "$_clash_for_linux_runtime_dir/subscriptions.yaml"
+set -g _clash_for_linux_mixin_file "$_clash_for_linux_runtime_dir/mixin.yaml"
+set -g _clash_for_linux_local_subscription_dir "$_clash_for_linux_runtime_dir/subscriptions"
+set -g _clash_for_linux_yq_bin "$_clash_for_linux_runtime_dir/bin/yq"
+
+# Hard constraints for completion:
+# - local-only and offline
+# - no controller or network access
+# - low-latency best effort with immediate silent fallback
+# - skip YAML-based dynamic completion when yq is missing or fails
+
+function _clash_for_linux_fish_matches
+  set -l cur "$argv[1]"
+  for candidate in $argv[2..-1]
+    test -n "$candidate"; or continue
+    if test -z "$cur"; or string match -q -- "$cur*" "$candidate"
+      echo "$candidate"
+    end
+  end
+end
+
+function _clash_for_linux_fish_stream_matches
+  set -l cur "$argv[1]"
+  while read -l candidate
+    test -n "$candidate"; or continue
+    test "$candidate" != "null"; or continue
+    if test -z "$cur"; or string match -q -- "$cur*" "$candidate"
+      echo "$candidate"
+    end
+  end
+end
+
+function _clash_for_linux_fish_subscription_matches
+  set -l cur "$argv[1]"
+  test -x "$_clash_for_linux_yq_bin"; or return 0
+  test -s "$_clash_for_linux_subscription_file"; or return 0
+
+  "$_clash_for_linux_yq_bin" eval '.sources | keys | .[]' "$_clash_for_linux_subscription_file" 2>/dev/null \
+    | _clash_for_linux_fish_stream_matches "$cur"
+end
+
+function _clash_for_linux_fish_relay_matches
+  set -l cur "$argv[1]"
+  test -x "$_clash_for_linux_yq_bin"; or return 0
+  test -s "$_clash_for_linux_mixin_file"; or return 0
+
+  "$_clash_for_linux_yq_bin" eval '(.append["proxy-groups"] // [])[] | select(.type == "relay") | .name' "$_clash_for_linux_mixin_file" 2>/dev/null \
+    | _clash_for_linux_fish_stream_matches "$cur"
+end
+
+function _clash_for_linux_fish_local_subscription_matches
+  set -l cur "$argv[1]"
+  test -d "$_clash_for_linux_local_subscription_dir"; or return 0
+
+  for path in "$_clash_for_linux_local_subscription_dir"/*
+    test -f "$path"; or continue
+    set -l candidate (basename "$path")
+    if test -z "$cur"; or string match -q -- "$cur*" "$candidate"
+      echo "$candidate"
+    end
+  end
+end
+
+function _clash_for_linux_fish_top_level
+  set -l cur "$argv[1]"
+  _clash_for_linux_fish_matches "$cur" \
+    add use ls health select on off status status-next \
+    boot log logs doctor ui secret tun dev config lan mixin \
+    relay profile sub proxy upgrade update completion help \
+    -h --help
+end
+
+function _clash_for_linux_fish_complete
+  set -l words (commandline -opc)
+  set -l cur (commandline -ct)
+  set -l root (basename "$words[1]" 2>/dev/null)
+  set -l canonical
+  set -l rel_index
+  set -l arg1
+
+  switch "$root"
+    case clashctl
+      if test (count $words) -le 1
+        _clash_for_linux_fish_top_level "$cur"
+        return 0
+      end
+      set canonical "$words[2]"
+      set rel_index (math (count $words) - 1)
+      set arg1 "$words[3]"
+    case clashrelay
+      set canonical relay
+      set rel_index (count $words)
+      set arg1 "$words[2]"
+    case clashmixin
+      set canonical mixin
+      set rel_index (count $words)
+      set arg1 "$words[2]"
+    case clashsecret
+      set canonical secret
+      set rel_index (count $words)
+      set arg1 "$words[2]"
+    case clashupgrade
+      set canonical upgrade
+      set rel_index (count $words)
+      set arg1 "$words[2]"
+    case clashtun
+      set canonical tun
+      set rel_index (count $words)
+      set arg1 "$words[2]"
+    case '*'
+      return 0
+  end
+
+  switch "$canonical"
+    case add
+      if test "$rel_index" -eq 1
+        _clash_for_linux_fish_matches "$cur" local
+      else if test "$arg1" = local
+        _clash_for_linux_fish_local_subscription_matches "$cur"
+      end
+    case use
+      _clash_for_linux_fish_matches "$cur" --recommend -r --verbose -v
+      if not string match -q -- '-*' "$cur"
+        _clash_for_linux_fish_subscription_matches "$cur"
+      end
+    case health
+      _clash_for_linux_fish_matches "$cur" --verbose -v
+      if not string match -q -- '-*' "$cur"
+        _clash_for_linux_fish_subscription_matches "$cur"
+      end
+    case status
+      _clash_for_linux_fish_matches "$cur" --verbose -v
+    case boot
+      if test "$rel_index" -eq 1
+        _clash_for_linux_fish_matches "$cur" on off status runtime proxy help -h --help
+      else if contains -- "$arg1" runtime proxy; and test "$rel_index" -eq 2
+        _clash_for_linux_fish_matches "$cur" on off status
+      end
+    case config
+      if test "$rel_index" -eq 1
+        _clash_for_linux_fish_matches "$cur" show explain regen kernel
+      else if test "$arg1" = kernel; and test "$rel_index" -eq 2
+        _clash_for_linux_fish_matches "$cur" mihomo clash
+      end
+    case lan
+      if test "$rel_index" -eq 1
+        _clash_for_linux_fish_matches "$cur" on off status enable disable help -h --help
+      end
+    case mixin
+      if test "$rel_index" -eq 1
+        _clash_for_linux_fish_matches "$cur" edit raw runtime help -e -c -r --edit --raw --runtime -h --help
+      end
+    case relay
+      if test "$rel_index" -eq 1
+        _clash_for_linux_fish_matches "$cur" add list ls remove rm delete help -h --help
+      else
+        switch "$arg1"
+          case remove rm delete
+            if test "$rel_index" -eq 2
+              _clash_for_linux_fish_relay_matches "$cur"
+            end
+          case add
+            _clash_for_linux_fish_matches "$cur" --domain --match
+        end
+      end
+    case sub
+      if test "$rel_index" -eq 1
+        _clash_for_linux_fish_matches "$cur" list use set enable disable rename remove rm del health help -h --help
+      else
+        switch "$arg1"
+          case use enable disable remove rm del rename
+            if test "$rel_index" -eq 2
+              _clash_for_linux_fish_subscription_matches "$cur"
+            end
+          case health
+            _clash_for_linux_fish_matches "$cur" --verbose -v
+            if test "$rel_index" -eq 2; and not string match -q -- '-*' "$cur"
+              _clash_for_linux_fish_subscription_matches "$cur"
+            end
+        end
+      end
+    case tun
+      if test "$rel_index" -eq 1
+        _clash_for_linux_fish_matches "$cur" status on off doctor
+      end
+    case upgrade
+      _clash_for_linux_fish_matches "$cur" mihomo clash -v --verbose
+    case update
+      _clash_for_linux_fish_matches "$cur" --force --regenerate
+    case dev
+      if test "$rel_index" -eq 1
+        _clash_for_linux_fish_matches "$cur" reset
+      end
+    case completion
+      if test "$rel_index" -eq 1
+        _clash_for_linux_fish_matches "$cur" bash zsh fish
+      end
+    case help
+      if test "$rel_index" -eq 1
+        _clash_for_linux_fish_matches "$cur" advanced
+      end
+  end
+end
+
+complete -c clashctl -e
+complete -c clashrelay -e
+complete -c clashmixin -e
+complete -c clashsecret -e
+complete -c clashupgrade -e
+complete -c clashtun -e
+
+complete -c clashctl -f -a '(_clash_for_linux_fish_complete)'
+complete -c clashrelay -f -a '(_clash_for_linux_fish_complete)'
+complete -c clashmixin -f -a '(_clash_for_linux_fish_complete)'
+complete -c clashsecret -f -a '(_clash_for_linux_fish_complete)'
+complete -c clashupgrade -f -a '(_clash_for_linux_fish_complete)'
+complete -c clashtun -f -a '(_clash_for_linux_fish_complete)'
+EOF
+}
+
 cmd_completion() {
   case "${1:-}" in
     bash)
@@ -424,8 +648,11 @@ cmd_completion() {
     zsh)
       completion_emit_zsh_script
       ;;
+    fish)
+      completion_emit_fish_script
+      ;;
     *)
-      die_usage "completion 参数不合法" "clashctl completion bash|zsh"
+      die_usage "completion 参数不合法" "clashctl completion bash|zsh|fish"
       ;;
   esac
 }

@@ -2430,6 +2430,38 @@ zsh_completion_entry_file() {
   fi
 }
 
+fish_completion_entry_file() {
+  if [ "$INSTALL_SCOPE" = "system" ]; then
+    echo "/etc/fish/completions/clash-for-linux.fish"
+  else
+    echo "$(completion_dir)/completion.fish"
+  fi
+}
+
+fish_completion_link_file() {
+  if [ "$INSTALL_SCOPE" = "system" ]; then
+    echo "/etc/fish/completions/clash-for-linux.fish"
+  else
+    echo "$HOME/.config/fish/completions/clash-for-linux.fish"
+  fi
+}
+
+fish_completion_link_files() {
+  local dir name
+
+  if [ "$INSTALL_SCOPE" = "system" ]; then
+    dir="/etc/fish/completions"
+  else
+    dir="$HOME/.config/fish/completions"
+  fi
+
+  for name in clashctl clashrelay clashmixin clashsecret clashupgrade clashtun; do
+    echo "$dir/$name.fish"
+  done
+
+  echo "$(fish_completion_link_file)"
+}
+
 clashctl_entry_target() {
   echo "$(command_install_dir)/clashctl"
 }
@@ -2534,7 +2566,7 @@ cleanup_legacy_shell_entries() {
 }
 
 install_shell_alias_entry() {
-  local profile_file fish_profile_file fish_conf_file alias_file fish_alias_file shell_rc bash_completion_file zsh_completion_file
+  local profile_file fish_profile_file fish_conf_file alias_file fish_alias_file shell_rc bash_completion_file zsh_completion_file fish_completion_file
 
   cleanup_legacy_shell_entries
 
@@ -2545,6 +2577,7 @@ install_shell_alias_entry() {
   fish_alias_file="$(fish_alias_source_file)"
   bash_completion_file="$(bash_completion_entry_file)"
   zsh_completion_file="$(zsh_completion_entry_file)"
+  fish_completion_file="$(fish_completion_entry_file)"
 
   mkdir -p "$(dirname "$profile_file")"
   [ -f "$alias_file" ] || die "未找到 alias 脚本：$alias_file"
@@ -2587,6 +2620,10 @@ end
 if test -f "$fish_alias_file"
   source "$fish_alias_file"
 end
+
+if status is-interactive; and test -f "$fish_completion_file"
+  source "$fish_completion_file"
+end
 EOF
 
   if [ "$fish_conf_file" != "$fish_profile_file" ]; then
@@ -2607,18 +2644,33 @@ EOF
 }
 
 install_clashctl_completion() {
-  local bash_target zsh_target
+  local bash_target zsh_target fish_target fish_link_target
 
   bash_target="$(bash_completion_entry_file)"
   zsh_target="$(zsh_completion_entry_file)"
+  fish_target="$(fish_completion_entry_file)"
 
   mkdir -p "$(dirname "$bash_target")"
   mkdir -p "$(dirname "$zsh_target")"
+  mkdir -p "$(dirname "$fish_target")"
 
   bash "$PROJECT_DIR/scripts/core/clashctl.sh" completion bash > "$bash_target"
   bash "$PROJECT_DIR/scripts/core/clashctl.sh" completion zsh > "$zsh_target"
+  bash "$PROJECT_DIR/scripts/core/clashctl.sh" completion fish > "$fish_target"
 
-  chmod +x "$bash_target" "$zsh_target" 2>/dev/null || true
+  chmod +x "$bash_target" "$zsh_target" "$fish_target" 2>/dev/null || true
+
+  while IFS= read -r fish_link_target; do
+    [ -n "${fish_link_target:-}" ] || continue
+    [ "$fish_link_target" != "$fish_target" ] || continue
+    mkdir -p "$(dirname "$fish_link_target")"
+    cat > "$fish_link_target" <<EOF
+# clash-for-linux fish completion entry
+if test -f "$fish_target"
+  source "$fish_target"
+end
+EOF
+  done < <(fish_completion_link_files)
 }
 
 remove_clashctl_entry() {
@@ -2646,7 +2698,12 @@ remove_shell_alias_entry() {
 }
 
 remove_clashctl_completion() {
-  rm -f "$(bash_completion_entry_file)" "$(zsh_completion_entry_file)" 2>/dev/null || true
+  rm -f "$(bash_completion_entry_file)" "$(zsh_completion_entry_file)" \
+    "$(fish_completion_entry_file)" "$(fish_completion_link_file)" 2>/dev/null || true
+  while IFS= read -r fish_link_target; do
+    [ -n "${fish_link_target:-}" ] || continue
+    rm -f "$fish_link_target" 2>/dev/null || true
+  done < <(fish_completion_link_files)
 }
 
 install_has_subscription() {
