@@ -2402,6 +2402,10 @@ alias_source_file() {
   echo "$PROJECT_DIR/scripts/core/alias.sh"
 }
 
+fish_alias_source_file() {
+  echo "$PROJECT_DIR/scripts/core/alias.fish"
+}
+
 completion_dir() {
   if [ "$INSTALL_SCOPE" = "system" ]; then
     echo "/etc/profile.d"
@@ -2530,17 +2534,21 @@ cleanup_legacy_shell_entries() {
 }
 
 install_shell_alias_entry() {
-  local profile_file alias_file shell_rc bash_completion_file zsh_completion_file
+  local profile_file fish_profile_file fish_conf_file alias_file fish_alias_file shell_rc bash_completion_file zsh_completion_file
 
   cleanup_legacy_shell_entries
 
   profile_file="$(profile_entry_file)"
+  fish_profile_file="$(fish_profile_entry_file)"
+  fish_conf_file="$(fish_conf_entry_file)"
   alias_file="$(alias_source_file)"
+  fish_alias_file="$(fish_alias_source_file)"
   bash_completion_file="$(bash_completion_entry_file)"
   zsh_completion_file="$(zsh_completion_entry_file)"
 
   mkdir -p "$(dirname "$profile_file")"
   [ -f "$alias_file" ] || die "未找到 alias 脚本：$alias_file"
+  [ -f "$fish_alias_file" ] || die "未找到 fish alias 脚本：$fish_alias_file"
 
 cat > "$profile_file" <<EOF
 #!/usr/bin/env bash
@@ -2565,6 +2573,31 @@ case "\$-" in
 esac
 EOF
   chmod +x "$profile_file"
+
+  mkdir -p "$(dirname "$fish_profile_file")"
+cat > "$fish_profile_file" <<EOF
+# clash-for-linux fish shell entry
+set -g CLASH_FOR_LINUX_PROJECT_DIR "$PROJECT_DIR"
+if functions -q fish_add_path
+  fish_add_path "$(command_install_dir)"
+else if not contains -- "$(command_install_dir)" \$PATH
+  set -gx PATH "$(command_install_dir)" \$PATH
+end
+
+if test -f "$fish_alias_file"
+  source "$fish_alias_file"
+end
+EOF
+
+  if [ "$fish_conf_file" != "$fish_profile_file" ]; then
+    mkdir -p "$(dirname "$fish_conf_file")"
+cat > "$fish_conf_file" <<EOF
+# clash-for-linux fish shell entry
+if test -f "$fish_profile_file"
+  source "$fish_profile_file"
+end
+EOF
+  fi
 
   for shell_rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
     install_rc_source_block "$shell_rc" "$profile_file"
@@ -2594,9 +2627,12 @@ remove_clashctl_entry() {
 }
 
 remove_shell_alias_entry() {
-  local profile_file
+  local profile_file fish_profile_file fish_conf_file
   profile_file="$(profile_entry_file)"
+  fish_profile_file="$(fish_profile_entry_file)"
+  fish_conf_file="$(fish_conf_entry_file)"
   rm -f "$profile_file" 2>/dev/null || true
+  rm -f "$fish_profile_file" "$fish_conf_file" 2>/dev/null || true
 
   if [ "$INSTALL_SCOPE" = "user" ]; then
     local shell_rc
@@ -2653,6 +2689,22 @@ profile_entry_file() {
     echo "/etc/profile.d/clash-for-linux.sh"
   else
     echo "$HOME/.config/clash-for-linux/profile.sh"
+  fi
+}
+
+fish_profile_entry_file() {
+  if [ "$INSTALL_SCOPE" = "system" ]; then
+    echo "/etc/fish/conf.d/clash-for-linux.fish"
+  else
+    echo "$HOME/.config/clash-for-linux/profile.fish"
+  fi
+}
+
+fish_conf_entry_file() {
+  if [ "$INSTALL_SCOPE" = "system" ]; then
+    echo "/etc/fish/conf.d/clash-for-linux.fish"
+  else
+    echo "$HOME/.config/fish/conf.d/clash-for-linux.fish"
   fi
 }
 
