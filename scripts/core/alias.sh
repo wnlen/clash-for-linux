@@ -90,7 +90,7 @@ _clash_alias_proxy_on_system() {
 }
 
 _clash_alias_proxy_off() {
-  _clash_alias_run_off "$@"
+  _clashctl_real proxy off >/dev/null || true
 }
 
 _clash_alias_proxy_show() {
@@ -279,7 +279,11 @@ clashctl() {
           _clash_alias_proxy_show
           ;;
         off)
-          _clash_alias_proxy_off "${@:3}"
+          _clash_alias_unset_shell_proxy
+          _clash_alias_proxy_off
+          _clash_alias_print_sep
+          echo "🧹 系统代理已关闭"
+          ui_blank
           ;;
         *)
           _clashctl_real "$@"
@@ -317,7 +321,7 @@ clashproxy() {
       clashctl proxy on
       ;;
     off)
-      clashctl off
+      clashctl proxy off
       ;;
     show|status)
       clashctl proxy show

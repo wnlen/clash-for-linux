@@ -38,6 +38,15 @@ function _clashctl_real_on
     _clashctl_real on $argv
 end
 
+function _clashctl_real_proxy_on
+    _clashctl_real proxy on >/dev/null
+end
+
+function _clashctl_real_proxy_off
+    _clashctl_real proxy off >/dev/null
+    or true
+end
+
 function _clashctl_real_off
     set -l project_dir (_clash_fish_project_dir)
     set -l clashctl_script "$project_dir/scripts/core/clashctl.sh"
@@ -203,16 +212,44 @@ function _clash_fish_unset_shell_proxy
     set -e NO_PROXY
 end
 
+function _clash_fish_print_sep
+    echo
+end
+
+function _clash_fish_proxy_show
+    return 0
+end
+
+function _clash_fish_proxy_on
+    _clashctl_real_proxy_on; or return $status
+    _clash_fish_export_proxy
+end
+
+function _clash_fish_proxy_on_system
+    _clashctl_real_proxy_on; or return $status
+    _clash_fish_export_system_proxy
+end
+
+function _clash_fish_proxy_off
+    _clash_fish_unset_shell_proxy
+    _clashctl_real_proxy_off
+    _clash_fish_print_sep
+    echo "🧹 系统代理已关闭"
+    _clash_fish_print_sep
+end
+
 function _clash_fish_after_on
     _clash_fish_set_persist_enabled true
     _clash_fish_export_proxy
 end
 
 function _clash_fish_run_on
-    set -l on_output (mktemp "$TMPDIR/clashon.XXXXXX" 2>/dev/null)
-    if test -z "$on_output"
-        set on_output (mktemp "/tmp/clashon.XXXXXX" 2>/dev/null)
+    set -l tmpdir /tmp
+    if set -q TMPDIR[1]; and test -n "$TMPDIR"
+        set tmpdir "$TMPDIR"
     end
+
+    set -l on_output (mktemp "$tmpdir/clashon.XXXXXX" 2>/dev/null)
     if test -z "$on_output"
         echo "❗ 开启代理失败：无法创建临时输出文件" >&2
         return 1
@@ -228,6 +265,11 @@ function _clash_fish_run_on
     if test "$on_rc" -ne 0
         if _clash_fish_export_system_proxy
             echo "🚨 clashctl on 返回非 0，但系统代理已写入，继续同步当前 Shell（底层返回码：$on_rc）" >&2
+            if test -s "$on_output"
+                sed 's/^/  /' "$on_output" >&2
+            end
+        else if _clash_fish_proxy_on_system
+            echo "🚨 clashctl on 返回非 0，已通过 proxy on 继续同步当前 Shell（底层返回码：$on_rc）" >&2
             if test -s "$on_output"
                 sed 's/^/  /' "$on_output" >&2
             end
@@ -284,9 +326,12 @@ function clashctl
             end
             switch "$subcmd"
                 case on
-                    _clash_fish_export_proxy
+                    _clash_fish_proxy_on
+                    or return $status
+                    _clash_fish_print_sep
+                    _clash_fish_proxy_show
                 case off
-                    _clash_fish_run_off $argv[3..-1]
+                    _clash_fish_proxy_off
                 case '*'
                     _clashctl_real $argv
             end
@@ -317,7 +362,7 @@ function clashproxy
         case on
             clashctl proxy on
         case off
-            clashctl off
+            clashctl proxy off
         case show status
             clashctl proxy show
         case groups
