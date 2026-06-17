@@ -839,6 +839,10 @@ normalize_runtime_config() {
     dns_listen_value="0.0.0.0:${dns_port_value}" \
     "$(yq_bin)" eval -i '
       .["mixed-port"] = (env(mixed_port) | tonumber) |
+      del(.port) |
+      del(.["socks-port"]) |
+      del(.["redir-port"]) |
+      del(.["tproxy-port"]) |
       .["external-controller"] = env(controller) |
       .secret = env(controller_secret_value) |
       .["external-ui"] = env(dashboard_dir_value) |
