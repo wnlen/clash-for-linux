@@ -41,6 +41,7 @@ install_runtime_entry
 install_local_dashboard_assets
 ensure_controller_secret >/dev/null
 set_shell_proxy_persist_enabled "false"
+prompt_install_tui
 
 ensure_subscription_bootstrap_for_install "default"
 prompt_subscription_if_needed

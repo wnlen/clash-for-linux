@@ -36,6 +36,158 @@
 - 需要稳定访问 GitHub、Go / Node / Docker 生态的开发者
 - 不希望手动维护 Clash 运行状态的用户
 
+# 🖥️ TUI 仪表盘
+
+通过 `clashctl tui` 进入交互式终端控制台，无需记忆命令即可管理所有功能。
+
+### 启动方式
+
+```bash
+clashctl tui
+```
+
+### 主界面
+
+TUI 启动后会显示状态面板和功能菜单：
+
+<!-- TODO: 替换为真实截图 -->
+<!-- <p align="center"><img src="resources/tui-main.png" width="80%"></p> -->
+
+```
+╔══════════════════════════════════════╗
+║       🐱 Clash TUI 控制台            ║
+╚══════════════════════════════════════╝
+
+╭──────────────────────────────────────╮
+│ ✅ 代理状态：已运行                    │
+│ 📡 当前订阅：my-sub                   │
+│ 🚀 当前节点：香港 IPLC 01             │
+│ 🌐 可用性  ：google.com ✓            │
+│ 🗺  代理模式：rule                    │
+│ 🟢 风险等级：low                      │
+│ 🔧 运行内核：mihomo                   │
+│ ⚙️  运行后端：systemd                 │
+│ 🌐 代理端口：7890                     │
+│ 📜 系统代理：已设置                    │
+│ 🚦 开机接管：已开启                    │
+╰──────────────────────────────────────╯
+
+> ⛔  关闭代理
+  💫  切换节点
+  💱  切换订阅
+  🌐  代理模式
+  🔌  活跃连接
+  📡  订阅管理
+  📋  订阅列表
+  🔍  状态详情
+  🩺  系统诊断
+  📜  查看日志
+  🧩  配置管理
+  🧪  Tun 管理
+  🚦  开机接管
+  🔑  密钥管理
+  🔄  刷新状态
+  ❌  退出
+```
+
+### 功能详解
+
+| 功能 | 说明 |
+|------|------|
+| **切换节点** | 浏览所有策略组，搜索过滤节点，查看延迟，支持一键并发测速所有节点 |
+| **切换订阅** | 快速切换当前激活的订阅源 |
+| **代理模式** | 在 Rule / Global / Direct 模式之间一键切换 |
+| **活跃连接** | 查看当前活跃连接列表，分页浏览，支持一键关闭所有连接 |
+| **订阅管理** | 添加 / 启用 / 禁用 / 重命名 / 删除订阅 |
+| **订阅列表** | 查看所有已保存订阅的状态 |
+| **状态详情** | 展示运行内核版本、端口、配置路径等详细信息 |
+| **系统诊断** | 调用 `doctor` 诊断面板，快速排查问题 |
+| **查看日志** | 实时查看 Clash 运行日志，支持级别过滤 |
+| **配置管理** | 查看 / 编辑 / 重新生成运行配置 |
+| **Tun 管理** | 启用 / 关闭 Tun 模式，查看 Tun 诊断 |
+| **开机接管** | 管理开机自启和系统代理持久化 |
+| **密钥管理** | 查看和修改 Web 控制台访问密钥 |
+
+### 节点切换与测速
+
+<!-- TODO: 替换为真实截图 -->
+<!-- <p align="center"><img src="resources/tui-node-select.png" width="80%"></p> -->
+
+```
+╔══════════════════════════════════════╗
+║          💫 切换节点                  ║
+╚══════════════════════════════════════╝
+
+选择策略组（ESC / 🔙 返回主菜单）
+> 🔍 搜索策略组...
+
+  节点选择       │  Selector  │  香港 IPLC 01
+  自动选择       │  URLTest   │  日本 NTT 03
+  故障转移       │  Fallback  │  新加坡 BGP 02
+
+────────────────────────────────────────
+
+  ⚡  测速所有节点
+  🔙  返回策略组
+
+  🇭🇰  香港 IPLC 01       ⚡ 58ms    ← 当前
+  🇭🇰  香港 IPLC 02       ⚡ 72ms
+  🇯🇵  日本 NTT 03        ⚡ 89ms
+  🇸🇬  新加坡 BGP 02      ⚡ 112ms
+  🇺🇸  美国 San Jose 01   ⚡ 186ms
+  🇰🇷  韩国 首尔 01       ⏱ 超时
+```
+
+- 支持 **模糊搜索**：输入关键字快速定位策略组和节点
+- 支持 **并发测速**：对所有节点同时发起测速请求（约 3 秒完成），结果按延迟排序显示
+- 测速结果会被缓存，在当前选择会话中复用，切换节点无需重复测速
+
+### 可选依赖
+
+TUI 依赖 [gum](https://github.com/charmbracelet/gum)（Charm 出品的终端 UI 工具）。gum 不是主安装依赖；未安装时仅 `clashctl tui` 不可用，`clashon`、`clashoff`、`clashctl select`、`status`、`doctor` 等命令不受影响。
+
+安装项目时会询问是否安装 gum，默认跳过；也可以安装后单独执行：
+
+```bash
+clashctl tui install-gum
+```
+
+非交互安装时可通过环境变量控制：
+
+```bash
+CLASH_INSTALL_GUM=true bash install.sh
+CLASH_INSTALL_GUM=false bash install.sh
+```
+
+```bash
+# macOS
+brew install gum
+
+# Arch Linux
+pacman -S gum
+
+# Ubuntu/Debian
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
+sudo apt update && sudo apt install gum
+
+# Fedora/RHEL
+echo '[charm]
+name=Charm
+baseurl=https://repo.charm.sh/yum/
+enabled=1
+gpgcheck=1
+gpgkey=https://repo.charm.sh/yum/gpg.key' | sudo tee /etc/yum.repos.d/charm.repo
+sudo rpm --import https://repo.charm.sh/yum/gpg.key
+sudo yum install gum
+
+# Go
+go install github.com/charmbracelet/gum@latest
+```
+
+> 如果未安装 gum，其他所有命令行功能仍然完全可用，仅 `clashctl tui` 不可用。
+
 # 🚀 一键安装（推荐）
 
 在终端中执行以下命令即可完成安装：
