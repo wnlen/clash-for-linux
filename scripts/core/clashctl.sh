@@ -59,14 +59,14 @@ Usage:
   boot proxy on|off|status       📜 仅管理开机代理保持
   upgrade                        🚀 升级当前或指定内核
   update                         🔄 更新项目代码
-  completion bash|zsh            💡 导出 Shell 补全脚本
+  completion bash|zsh|fish       💡 导出 Shell 补全脚本
   dev reset                      🧪 恢复到安装前状态（保留项目目录和已下载文件）
 
 🩺 Diagnose:
   doctor                         🩺 诊断环境与运行状态
   status                         🔍️ 查看状态总览
   log/logs                       📜 查看日志
-  completion                     💡 导出 Bash / Zsh 补全脚本
+  completion                     💡 导出 Bash / Zsh / Fish 补全脚本
 
 📌 Advanced Examples:
   clashctl sub list
@@ -3063,7 +3063,7 @@ cmd_ui_help_summary() {
   printf '  %-18s %s\n' "clashctl sub" "🧩 订阅高级管理（启用 / 禁用 / 重命名 / 删除）"
   printf '  %-18s %s\n' "clashctl upgrade" "🚀 升级当前或指定内核"
   printf '  %-18s %s\n' "clashctl update" "🔄 更新项目代码"
-  printf '  %-18s %s\n' "clashctl completion" "💡 导出 Bash / Zsh 补全脚本"
+  printf '  %-18s %s\n' "clashctl completion" "💡 导出 Bash / Zsh / Fish 补全脚本"
   echo "📜 日志"
   printf '  %-18s %s\n' "clashctl doctor" "🩺 诊断面板"
   printf '  %-18s %s\n' "clashctl log/logs" "📜 查看日志"
