@@ -2648,10 +2648,11 @@ install_shell_alias_entry() {
 cat > "$profile_file" <<EOF
 #!/usr/bin/env bash
 # clash-for-linux shell entry
+export CLASH_FOR_LINUX_PROJECT_DIR="$PROJECT_DIR"
 export PATH="$(command_install_dir):\$PATH"
 
-if [ -n "\${BASH_VERSION:-}" ] && [ -z "\${CLASH_FOR_LINUX_SHELL_LOADED:-}" ]; then
-  CLASH_FOR_LINUX_SHELL_LOADED="1"
+if [ -z "\${CLASH_FOR_LINUX_SHELL_LOADED:-}" ] && { [ -n "\${BASH_VERSION:-}" ] || [ -n "\${ZSH_VERSION:-}" ]; }; then
+  export CLASH_FOR_LINUX_SHELL_LOADED="1"
   source "$alias_file"
 fi
 

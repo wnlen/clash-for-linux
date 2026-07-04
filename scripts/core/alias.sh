@@ -38,6 +38,12 @@ _clashctl_real_on_target() {
 
 _clash_alias_project_dir() {
   local self_dir
+
+  if [ -n "${CLASH_FOR_LINUX_PROJECT_DIR:-}" ]; then
+    echo "$CLASH_FOR_LINUX_PROJECT_DIR"
+    return 0
+  fi
+
   self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
   echo "$self_dir"
 }
@@ -56,10 +62,17 @@ _clash_alias_yq_bin() {
 
 _clash_alias_env_value() {
   local key="$1"
-  local env_file
+  local env_file value
 
-  if [ -n "${!key:-}" ]; then
-    printf '%s' "${!key}"
+  case "$key" in
+    ""|*[!A-Za-z0-9_]*)
+      return 0
+      ;;
+  esac
+
+  eval "value=\${$key:-}"
+  if [ -n "${value:-}" ]; then
+    printf '%s' "$value"
     return 0
   fi
 

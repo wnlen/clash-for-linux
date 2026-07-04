@@ -483,7 +483,7 @@ local_subscription_share_links_to_subconverter_url() {
       sub(/[[:space:]]+$/, "")
     }
     $0 == "" || $0 ~ /^#/ { next }
-    $0 ~ /^(vmess|vless|trojan|tuic):\/\// {
+    $0 ~ /^(vmess|vless|trojan|tuic|hysteria2|hy2|anytls):\/\// {
       if (out != "") {
         out = out "|"
       }
@@ -577,7 +577,7 @@ local_subscription_convert_url_from_url() {
   fi
 
   rm -f "$decoded_file" 2>/dev/null || true
-  die "本地订阅不是 Clash YAML，且无法识别为 Base64 或 vmess/vless/trojan/tuic 分享链接：$local_path"
+  die "本地订阅不是 Clash YAML，且无法识别为 Base64 或 vmess/vless/trojan/tuic/hysteria2/hy2/anytls 分享链接：$local_path"
 }
 
 download_candidate_probe() {
@@ -721,7 +721,15 @@ download_subscription_yaml() {
 subscription_cache_identity() {
   local url="$1"
   local fmt="${2:-clash}"
-  printf '%s|%s' "$fmt" "$url"
+  local ua=""
+
+  case "$fmt" in
+    clash|convert)
+      ua="$(subconverter_subscription_user_agent)"
+      ;;
+  esac
+
+  printf '%s|%s|%s' "$fmt" "$url" "$ua"
 }
 
 subscription_cache_key() {
@@ -3311,7 +3319,7 @@ subscription_yaml_has_no_nodes() {
 }
 
 subconverter_default_subscription_user_agent() {
-  echo "clash.meta/1.18.0 clash/1.18.0 subconverter/0.9.0"
+  echo "clash-verge/v2.2.3"
 }
 
 subconverter_subscription_user_agent() {
