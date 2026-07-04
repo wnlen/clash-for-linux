@@ -483,7 +483,7 @@ local_subscription_share_links_to_subconverter_url() {
       sub(/[[:space:]]+$/, "")
     }
     $0 == "" || $0 ~ /^#/ { next }
-    $0 ~ /^(vmess|vless|trojan|tuic):\/\// {
+    $0 ~ /^(vmess|vless|trojan|tuic|hysteria2|hy2|anytls):\/\// {
       if (out != "") {
         out = out "|"
       }
@@ -577,7 +577,7 @@ local_subscription_convert_url_from_url() {
   fi
 
   rm -f "$decoded_file" 2>/dev/null || true
-  die "本地订阅不是 Clash YAML，且无法识别为 Base64 或 vmess/vless/trojan/tuic 分享链接：$local_path"
+  die "本地订阅不是 Clash YAML，且无法识别为 Base64 或 vmess/vless/trojan/tuic/hysteria2/hy2/anytls 分享链接：$local_path"
 }
 
 download_candidate_probe() {
@@ -721,7 +721,15 @@ download_subscription_yaml() {
 subscription_cache_identity() {
   local url="$1"
   local fmt="${2:-clash}"
-  printf '%s|%s' "$fmt" "$url"
+  local ua=""
+
+  case "$fmt" in
+    clash|convert)
+      ua="$(subconverter_subscription_user_agent)"
+      ;;
+  esac
+
+  printf '%s|%s|%s' "$fmt" "$url" "$ua"
 }
 
 subscription_cache_key() {
@@ -2153,6 +2161,8 @@ append:
   proxies: []
   proxy-groups: []
   rules: []
+remove:
+  rules: []
 EOF
 }
 
@@ -2217,6 +2227,191 @@ ensure_mixin_file() {
   fi
 }
 
+ensure_mixin_arrays() {
+  local file
+  ensure_mixin_file
+  file="$(mixin_file)"
+
+  "$(yq_bin)" eval -i '
+    .override = (.override // {}) |
+    .prepend = (.prepend // {}) |
+    .prepend.proxies = (.prepend.proxies // []) |
+    .prepend["proxy-groups"] = (.prepend["proxy-groups"] // []) |
+    .prepend.rules = (.prepend.rules // []) |
+    .append = (.append // {}) |
+    .append.proxies = (.append.proxies // []) |
+    .append["proxy-groups"] = (.append["proxy-groups"] // []) |
+    .append.rules = (.append.rules // []) |
+    .remove = (.remove // {}) |
+    .remove.rules = (.remove.rules // [])
+  ' "$file"
+
+  echo "$file"
+}
+
+mixin_add_rule() {
+  local position="$1"
+  local rule="$2"
+  local file
+
+  case "$position" in
+    prepend|append) ;;
+    *) die "规则位置只允许 prepend / append" ;;
+  esac
+  [ -n "${rule:-}" ] || die "规则不能为空"
+
+  file="$(ensure_mixin_arrays)"
+  if [ "$position" = "prepend" ]; then
+    MIXIN_RULE="$rule" "$(yq_bin)" eval -i '
+      .remove.rules = ((.remove.rules // []) | map(select(. != strenv(MIXIN_RULE)))) |
+      .append.rules = ((.append.rules // []) | map(select(. != strenv(MIXIN_RULE)))) |
+      .prepend.rules = ([strenv(MIXIN_RULE)] + ((.prepend.rules // []) | map(select(. != strenv(MIXIN_RULE)))))
+    ' "$file"
+  else
+    MIXIN_RULE="$rule" "$(yq_bin)" eval -i '
+      .remove.rules = ((.remove.rules // []) | map(select(. != strenv(MIXIN_RULE)))) |
+      .prepend.rules = ((.prepend.rules // []) | map(select(. != strenv(MIXIN_RULE)))) |
+      .append.rules = (((.append.rules // []) | map(select(. != strenv(MIXIN_RULE)))) + [strenv(MIXIN_RULE)])
+    ' "$file"
+  fi
+
+  echo "$file"
+}
+
+mixin_rules_list() {
+  local file
+  file="$(ensure_mixin_arrays)"
+
+  "$(yq_bin)" eval '(.prepend.rules // [])[]' "$file" 2>/dev/null \
+    | awk -v pos="prepend" '{print pos "\t" NR-1 "\t" $0}'
+  "$(yq_bin)" eval '(.append.rules // [])[]' "$file" 2>/dev/null \
+    | awk -v pos="append" '{print pos "\t" NR-1 "\t" $0}'
+}
+
+runtime_rules_list() {
+  local file="$RUNTIME_DIR/config.yaml"
+
+  [ -s "$file" ] || return 0
+  "$(yq_bin)" eval '(.rules // [])[]' "$file" 2>/dev/null \
+    | awk '{print NR-1 "\t" $0}'
+}
+
+rule_test_target_host() {
+  local target="$1"
+  local host
+
+  target="$(printf '%s' "$target" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  [ -n "${target:-}" ] || return 1
+  case "$target" in
+    *://*) target="${target#*://}" ;;
+  esac
+  target="${target%%[/?#]*}"
+  target="${target##*@}"
+
+  case "$target" in
+    \[*\]*)
+      host="${target#\[}"
+      host="${host%%\]*}"
+      ;;
+    *)
+      host="${target%%:*}"
+      ;;
+  esac
+
+  host="${host%.}"
+  host="$(printf '%s' "$host" | tr 'A-Z' 'a-z')"
+  [ -n "${host:-}" ] || return 1
+  case "$host" in
+    *[!a-z0-9._-]*) return 1 ;;
+  esac
+
+  printf '%s\n' "$host"
+}
+
+rule_match_for_target() {
+  local host="$1"
+
+  host="$(rule_test_target_host "$host")" || return 1
+  runtime_rules_list | awk -F '\t' -v host="$host" '
+    {
+      rule = $2
+      split(rule, field, ",")
+      type = field[1]
+      content = tolower(field[2])
+      policy = (type == "MATCH") ? field[2] : field[3]
+      suffix_match = type == "DOMAIN-SUFFIX" && (host == content || (length(host) > length(content) && substr(host, length(host) - length(content), 1) == "." && substr(host, length(host) - length(content) + 1) == content))
+
+      if (!found && ((type == "DOMAIN" && host == content) || suffix_match || (type == "DOMAIN-KEYWORD" && index(host, content) > 0) || type == "MATCH")) {
+        print $1 "\t" rule "\t" policy
+        found = 1
+      }
+    }
+    END { if (!found) exit 1 }
+  '
+}
+
+current_rules_list() {
+  local file="$RUNTIME_DIR/config.yaml"
+
+  if [ ! -s "$file" ]; then
+    mixin_rules_list
+    return 0
+  fi
+
+  awk -F '\t' '
+    FILENAME == ARGV[1] {
+      if (!($3 in pos)) {
+        pos[$3] = $1
+        idx[$3] = $2
+      }
+      next
+    }
+    {
+      rule = $2
+      if (rule in pos) {
+        print pos[rule] "\t" idx[rule] "\t" rule
+      } else {
+        print "runtime\t-\t" rule
+      }
+    }
+  ' <(mixin_rules_list) <(runtime_rules_list)
+}
+
+mixin_remove_rule_at() {
+  local position="$1"
+  local index="$2"
+  local file
+
+  case "$position" in
+    prepend|append) ;;
+    *) die "规则位置只允许 prepend / append" ;;
+  esac
+  case "$index" in
+    ""|*[!0-9]*) die "规则序号必须是数字" ;;
+  esac
+
+  file="$(ensure_mixin_arrays)"
+  if [ "$position" = "prepend" ]; then
+    "$(yq_bin)" eval -i "del(.prepend.rules[$index])" "$file"
+  else
+    "$(yq_bin)" eval -i "del(.append.rules[$index])" "$file"
+  fi
+
+  echo "$file"
+}
+
+mixin_remove_runtime_rule() {
+  local rule="$1"
+  local file
+
+  [ -n "${rule:-}" ] || die "规则不能为空"
+
+  file="$(ensure_mixin_arrays)"
+  MIXIN_RULE="$rule" "$(yq_bin)" eval -i '.remove.rules = ((.remove.rules // []) + [strenv(MIXIN_RULE)] | unique)' "$file"
+
+  echo "$file"
+}
+
 apply_mixin_override() {
   local runtime_file="$1"
   local mixin_file_path
@@ -2260,6 +2455,20 @@ apply_mixin_append_arrays() {
     | .proxies = (((.proxies // []) + ($mixin.append.proxies // [])) | unique_by(.name))
     | .["proxy-groups"] = (((.["proxy-groups"] // []) + ($mixin.append["proxy-groups"] // [])) | unique_by(.name))
     | .rules = (((.rules // []) + ($mixin.append.rules // [])) | unique)
+  ' "$runtime_file"
+}
+
+apply_mixin_remove_arrays() {
+  local runtime_file="$1"
+  local mixin_file_path
+  mixin_file_path="$(mixin_read_file)"
+
+  [ -s "$runtime_file" ] || die "运行配置不存在：$runtime_file"
+  [ -f "$mixin_file_path" ] || return 0
+
+  RUNTIME_FILE="$runtime_file" MIXIN_FILE="$mixin_file_path" "$(yq_bin)" eval -i '
+    (load(strenv(MIXIN_FILE)) // {}) as $mixin
+    | .rules = ((.rules // []) - ($mixin.remove.rules // []))
   ' "$runtime_file"
 }
 
@@ -2307,6 +2516,17 @@ apply_runtime_mixin() {
     return 1
   fi
   rm -f "$(config_tmp_dir)/mixin-append.err" 2>/dev/null || true
+
+  build_debug "mixin: remove"
+  if ! apply_mixin_remove_arrays "$runtime_file" 2>"$(config_tmp_dir)/mixin-remove.err"; then
+    write_compile_error_with_detail \
+      "其他运行配置 YAML 解析失败：$(display_config_path "$runtime_file")" \
+      "$runtime_file" \
+      "mixin remove: $(cat "$(config_tmp_dir)/mixin-remove.err" 2>/dev/null || true)"
+    rm -f "$(config_tmp_dir)/mixin-remove.err" 2>/dev/null || true
+    return 1
+  fi
+  rm -f "$(config_tmp_dir)/mixin-remove.err" 2>/dev/null || true
 }
 
 show_subscription() {
@@ -3311,7 +3531,7 @@ subscription_yaml_has_no_nodes() {
 }
 
 subconverter_default_subscription_user_agent() {
-  echo "clash.meta/1.18.0 clash/1.18.0 subconverter/0.9.0"
+  echo "clash-verge/v2.2.3"
 }
 
 subconverter_subscription_user_agent() {

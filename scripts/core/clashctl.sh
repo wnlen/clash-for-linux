@@ -33,6 +33,7 @@ Usage:
   config                         🧩 配置编译管理
   config kernel mihomo|clash     🧩 切换指定内核
   mixin                          🧩 Mixin 配置管理
+  rule                           📜 规则管理
   relay                          🔗 多跳节点管理
   lan                            🏠 局域网代理管理
   
@@ -77,6 +78,7 @@ Usage:
 
   clashctl relay add 多跳-示例 节点A 节点B --domain example.com
   clashctl relay list
+  clashctl rule
 
 💡 Notes:
   当前编译链固定为 active-only
@@ -4300,7 +4302,8 @@ mixin_config_is_empty() {
       (((.prepend.rules // []) | length) == 0) and
       (((.append.proxies // []) | length) == 0) and
       (((.append["proxy-groups"] // []) | length) == 0) and
-      (((.append.rules // []) | length) == 0)
+      (((.append.rules // []) | length) == 0) and
+      (((.remove.rules // []) | length) == 0)
     ' "$file" 2>/dev/null | head -n 1 || true)"
     [ "$noop" = "true" ] && return 0
   fi
@@ -4351,11 +4354,16 @@ append:
   rules:
     - MATCH,节点选择
 
+remove:
+  rules:
+    - DOMAIN,old.example,DIRECT
+
 说明：
   override 会覆盖同名字段
   override.secret 会被忽略，控制器密钥只从 .env 的 CLASH_CONTROLLER_SECRET 读取
   prepend 会把数组内容放到原始订阅前面
   append 会把数组内容放到原始订阅后面
+  remove 会从最终规则中删除匹配项
 EOF
 }
 
@@ -4464,35 +4472,7 @@ cmd_mixin() {
 }
 
 ensure_relay_mixin_file() {
-  local file
-  ensure_config_files
-  file="$(mixin_config_file)"
-
-  [ -s "$file" ] || cat > "$file" <<'EOF'
-override: {}
-prepend:
-  proxies: []
-  proxy-groups: []
-  rules: []
-append:
-  proxies: []
-  proxy-groups: []
-  rules: []
-EOF
-
-  "$(yq_bin)" eval -i '
-    .override = (.override // {}) |
-    .prepend = (.prepend // {}) |
-    .prepend.proxies = (.prepend.proxies // []) |
-    .prepend["proxy-groups"] = (.prepend["proxy-groups"] // []) |
-    .prepend.rules = (.prepend.rules // []) |
-    .append = (.append // {}) |
-    .append.proxies = (.append.proxies // []) |
-    .append["proxy-groups"] = (.append["proxy-groups"] // []) |
-    .append.rules = (.append.rules // [])
-  ' "$file"
-
-  echo "$file"
+  ensure_mixin_arrays
 }
 
 relay_apply_mixin_change() {
@@ -4671,6 +4651,373 @@ cmd_relay() {
       die_usage "未知的 relay 子命令：$1" "clashctl relay help"
       ;;
   esac
+}
+
+rule_prompt_position() {
+  local idx
+
+  echo "📜 请选择规则位置：" >&2
+  echo "  1) 前置规则（推荐）" >&2
+  echo "  2) 后置规则" >&2
+  echo "  q) 退出" >&2
+  echo >&2
+
+  idx="$(proxy_pick_index 2 1)" || return 1
+  case "$idx" in
+    1) echo "prepend" ;;
+    2) echo "append" ;;
+  esac
+}
+
+rule_prompt_type() {
+  local idx type
+  local -a types=(DOMAIN-SUFFIX DOMAIN-KEYWORD DOMAIN IP-CIDR GEOIP MATCH)
+
+  echo "📜 请选择规则类型：" >&2
+  idx=1
+  for type in "${types[@]}"; do
+    printf '  %s) %s\n' "$idx" "$type" >&2
+    idx=$((idx + 1))
+  done
+  echo "  q) 退出" >&2
+  echo >&2
+
+  idx="$(proxy_pick_index "${#types[@]}" 1)" || return 1
+  echo "${types[$((idx - 1))]}"
+}
+
+rule_prompt_content() {
+  local type="$1"
+  local input
+
+  [ "$type" = "MATCH" ] && return 0
+
+  while true; do
+    printf "请输入规则内容：" >&2
+    IFS= read -r input || return 1
+    input="$(add_trim_input "$input")"
+
+    [ -n "${input:-}" ] || {
+      echo "🚨 规则内容不能为空" >&2
+      continue
+    }
+    case "$input" in
+      *,*)
+        echo "🚨 规则内容不能包含英文逗号" >&2
+        continue
+        ;;
+    esac
+
+    echo "$input"
+    return 0
+  done
+}
+
+rule_policy_candidates() {
+  printf '%s\n' DIRECT REJECT
+  [ -s "$RUNTIME_DIR/config.yaml" ] || return 0
+  "$(yq_bin)" eval '(.["proxy-groups"] // [])[].name // ""' "$RUNTIME_DIR/config.yaml" 2>/dev/null
+}
+
+rule_prompt_policy() {
+  local idx candidate
+  local -a policies=()
+
+  while IFS= read -r candidate; do
+    [ -n "${candidate:-}" ] || continue
+    printf '%s\n' "${policies[@]}" | grep -Fxq "$candidate" 2>/dev/null && continue
+    policies+=("$candidate")
+  done < <(rule_policy_candidates)
+
+  echo "📜 请选择代理策略：" >&2
+  idx=1
+  for candidate in "${policies[@]}"; do
+    printf '  %s) %s\n' "$idx" "$candidate" >&2
+    idx=$((idx + 1))
+  done
+  echo "  q) 退出" >&2
+  echo >&2
+
+  idx="$(proxy_pick_index "${#policies[@]}" 1)" || return 1
+  echo "${policies[$((idx - 1))]}"
+}
+
+rule_build_line() {
+  local type="$1"
+  local content="$2"
+  local policy="$3"
+
+  case "$type" in
+    DOMAIN-SUFFIX|DOMAIN-KEYWORD|DOMAIN|IP-CIDR|GEOIP|MATCH) ;;
+    *) die "不支持的规则类型：$type" ;;
+  esac
+  case "$policy" in
+    ""|*,*) die "代理策略名称不能为空且不能包含英文逗号" ;;
+  esac
+
+  if [ "$type" = "MATCH" ]; then
+    echo "MATCH,$policy"
+  else
+    echo "$type,$content,$policy"
+  fi
+}
+
+rule_add_interactive() {
+  local position type content policy rule file
+
+  ui_title "📜 添加规则"
+  position="$(rule_prompt_position)" || return 0
+  type="$(rule_prompt_type)" || return 0
+  content="$(rule_prompt_content "$type")" || return 0
+  policy="$(rule_prompt_policy)" || return 0
+  rule="$(rule_build_line "$type" "$content" "$policy")"
+
+  file="$(mixin_add_rule "$position" "$rule")"
+
+  ui_title "📜 规则已写入"
+  ui_kv "🔧" "配置文件" "$file"
+  ui_kv "📜" "规则" "$rule"
+
+  echo
+  echo "ℹ️ 正在重新生成配置 ..."
+  regenerate_config
+  apply_runtime_change_after_config_mutation
+  ui_next "clashctl mixin runtime"
+  ui_blank
+}
+
+rule_read_key() {
+  local key rest="" next result input_fd=0 tty_opened="false"
+
+  if [ -t 0 ] && { exec 3</dev/tty; } 2>/dev/null; then
+    input_fd=3
+    tty_opened="true"
+  fi
+
+  IFS= read -rsn1 key <&"$input_fd" || {
+    [ "$tty_opened" = "true" ] && exec 3<&-
+    return 1
+  }
+  case "$key" in
+    $'\033')
+      while IFS= read -rsn1 -t 0.5 next <&"$input_fd"; do
+        rest="${rest}${next}"
+        case "$next" in
+          A|B|C|D|~) break ;;
+        esac
+        [ "${#rest}" -lt 8 ] || break
+      done
+      case "$rest" in
+        *A) result="up" ;;
+        *B) result="down" ;;
+        *C) result="right" ;;
+        *D) result="left" ;;
+        *) result="escape" ;;
+      esac
+      ;;
+    *)
+      result="$key"
+      ;;
+  esac
+
+  [ "$tty_opened" = "true" ] && exec 3<&-
+  echo "$result"
+}
+
+rule_print_menu() {
+  local selected="$1"
+  local page_start="$2"
+  local idx position_label marker end page page_count page_size=10
+
+  [ -t 1 ] && printf '\033[H\033[J'
+  ui_title "📜 当前规则"
+
+  if [ "$rule_count" -eq 0 ]; then
+    echo "  暂无规则"
+  else
+    end=$((page_start + page_size))
+    [ "$end" -gt "$rule_count" ] && end="$rule_count"
+    page=$((page_start / page_size + 1))
+    page_count=$(((rule_count + page_size - 1) / page_size))
+
+    echo "  页 $page/$page_count   显示 $((page_start + 1))-$end / $rule_count   当前 $((selected + 1))"
+    echo "  ----------------------------------------"
+
+    idx="$page_start"
+    while [ "$idx" -lt "$end" ]; do
+      marker=" "
+      [ "$idx" -eq "$selected" ] && marker=">"
+      case "${rule_positions[$idx]}" in
+        prepend) position_label="自定义前置" ;;
+        append) position_label="自定义后置" ;;
+        *) position_label="运行" ;;
+      esac
+      printf '  %s %s [%s] %s\n' "$marker" "$((idx + 1))" "$position_label" "${rule_values[$idx]}"
+      idx=$((idx + 1))
+    done
+    echo "  ----------------------------------------"
+  fi
+
+  echo
+  echo "  ↑/↓ 选择   ←/→ 翻页   a 添加   d 删除   q 退出"
+  echo
+}
+
+rule_confirm_delete() {
+  local rule="$1"
+  local answer
+
+  echo >&2
+  echo "确认删除这条规则？" >&2
+  echo "  $rule" >&2
+  printf "按 y 删除，其他键取消: " >&2
+  answer="$(rule_read_key)" || return 1
+  echo >&2
+
+  [ "$answer" = "y" ] || [ "$answer" = "Y" ]
+}
+
+cmd_rule_test() {
+  local target host match index rule policy
+
+  [ "$#" -eq 1 ] || die_usage "rule test 需要一个网站或域名" "clashctl rule test example.com"
+  [ -s "$RUNTIME_DIR/config.yaml" ] || die_state "运行配置不存在" "clashctl config regen"
+
+  target="$1"
+  host="$(rule_test_target_host "$target")" || die_usage "规则测试目标不合法：$target" "clashctl rule test example.com"
+
+  ui_title "📜 规则测试"
+  ui_kv "🌐" "目标" "$host"
+
+  if match="$(rule_match_for_target "$host")"; then
+    IFS=$'\t' read -r index rule policy <<< "$match"
+    ui_kv "🔢" "规则序号" "$((index + 1))"
+    ui_kv "📜" "命中规则" "$rule"
+    ui_kv "🎯" "代理策略" "${policy:-<unknown>}"
+  else
+    ui_warn "没有命中可静态判断的规则"
+    ui_info "当前仅判断 DOMAIN / DOMAIN-SUFFIX / DOMAIN-KEYWORD / MATCH"
+    ui_blank
+    return 1
+  fi
+
+  ui_blank
+}
+
+cmd_rule() {
+  local selected=0 page_start=0 page_size=10 page_end key removed_rule file reload="true"
+  local -a rule_positions=()
+  local -a rule_indexes=()
+  local -a rule_values=()
+  local rule_count=0 position index rule
+
+  prepare
+  [ -x "$(yq_bin)" ] || die_state "依赖未就绪：缺少 yq（$(yq_bin)）" "请先执行 bash install.sh"
+
+  case "${1:-}" in
+    test)
+      shift || true
+      cmd_rule_test "$@"
+      return 0
+      ;;
+    "")
+      ;;
+    help|-h|--help)
+      ui_title "📜 规则管理"
+      echo "📜 用法："
+      echo "  clashctl rule"
+      echo "  clashctl rule test <网站或域名>"
+      echo
+      echo "说明："
+      echo "  列出当前运行配置规则；自定义规则来自 runtime/mixin.yaml"
+      echo "  ↑/↓ 选择规则，←/→ 翻页，a 添加规则，d 删除规则，q 退出"
+      echo "  test 静态判断网站会命中哪条明文规则"
+      return 0
+      ;;
+    *)
+      die_usage "未知的 rule 子命令：$1" "clashctl rule help"
+      ;;
+  esac
+
+  while true; do
+    if [ "$reload" = "true" ]; then
+      rule_positions=()
+      rule_indexes=()
+      rule_values=()
+      while IFS=$'\t' read -r position index rule; do
+        [ -n "${rule:-}" ] || continue
+        rule_positions+=("$position")
+        rule_indexes+=("$index")
+        rule_values+=("$rule")
+      done < <(current_rules_list)
+
+      rule_count="${#rule_values[@]}"
+      if [ "$rule_count" -gt 0 ]; then
+        [ "$selected" -ge "$rule_count" ] && selected=$((rule_count - 1))
+        [ "$page_start" -ge "$rule_count" ] && page_start=$(((rule_count - 1) / page_size * page_size))
+        [ "$selected" -lt "$page_start" ] && selected="$page_start"
+        [ "$selected" -ge $((page_start + page_size)) ] && selected="$page_start"
+      else
+        selected=0
+        page_start=0
+      fi
+      reload="false"
+    fi
+
+    rule_print_menu "$selected" "$page_start"
+    key="$(rule_read_key)" || return 0
+
+    case "$key" in
+      q|Q)
+        return 0
+        ;;
+      a|A)
+        rule_add_interactive
+        reload="true"
+        ;;
+      up)
+        [ "$rule_count" -gt 0 ] && [ "$selected" -gt "$page_start" ] && selected=$((selected - 1))
+        ;;
+      down)
+        page_end=$((page_start + page_size))
+        [ "$page_end" -gt "$rule_count" ] && page_end="$rule_count"
+        [ "$rule_count" -gt 0 ] && [ "$selected" -lt $((page_end - 1)) ] && selected=$((selected + 1))
+        ;;
+      left)
+        if [ "$page_start" -gt 0 ]; then
+          page_start=$((page_start - page_size))
+          selected="$page_start"
+        fi
+        ;;
+      right)
+        if [ "$rule_count" -gt 0 ] && [ $((page_start + page_size)) -lt "$rule_count" ]; then
+          page_start=$((page_start + page_size))
+          selected="$page_start"
+        fi
+        ;;
+      d|D)
+        [ "$rule_count" -gt 0 ] || continue
+        removed_rule="${rule_values[$selected]}"
+        rule_confirm_delete "$removed_rule" || continue
+        case "${rule_positions[$selected]:-}" in
+          prepend|append)
+            file="$(mixin_remove_rule_at "${rule_positions[$selected]}" "${rule_indexes[$selected]}")"
+            ;;
+          *)
+            file="$(mixin_remove_runtime_rule "$removed_rule")"
+            ;;
+        esac
+        ui_title "📜 规则已删除"
+        ui_kv "🔧" "配置文件" "$file"
+        ui_kv "📜" "规则" "$removed_rule"
+        echo
+        echo "ℹ️ 正在重新生成配置 ..."
+        regenerate_config
+        apply_runtime_change_after_config_mutation
+        reload="true"
+        ;;
+    esac
+  done
 }
 
 runtime_config_exists() {
@@ -6960,11 +7307,14 @@ cmd_proxy_nodes() {
 
 proxy_pick_index() {
   local count="$1"
+  local default="${2:-}"
   local input
 
   while true; do
     printf "> " >&2
     IFS= read -r input || return 1
+    input="$(add_trim_input "$input")"
+    [ -n "${input:-}" ] || [ -z "$default" ] || input="$default"
 
     case "${input:-}" in
       q|Q)
@@ -6979,6 +7329,49 @@ proxy_pick_index() {
 
     echo "🚨 请输入 1-$count 之间的编号，或输入 q 退出" >&2
   done
+}
+
+proxy_pick_node_index() {
+  local count="$1"
+  local input
+
+  while true; do
+    printf "> " >&2
+    IFS= read -r input || return 1
+    input="$(add_trim_input "$input")"
+
+    case "${input:-}" in
+      q|Q)
+        return 1
+        ;;
+      r|R)
+        echo "refresh"
+        return 0
+        ;;
+    esac
+
+    if printf '%s' "$input" | grep -Eq '^[0-9]+$' && [ "$input" -ge 1 ] && [ "$input" -le "$count" ]; then
+      echo "$input"
+      return 0
+    fi
+
+    echo "🚨 请输入 1-$count 之间的编号，输入 r 刷新测速，或输入 q 退出" >&2
+  done
+}
+
+proxy_print_node_choice_line() {
+  local idx="$1"
+  local node="$2"
+  local current="$3"
+  local delay="$4"
+  local delay_label
+
+  delay_label="$(proxy_delay_label "${delay:-0}")"
+  if [ "$node" = "$current" ]; then
+    printf '  %s) 🚀 %s %s [当前]\n' "$idx" "$node" "$delay_label"
+  else
+    printf '  %s) 🚀 %s %s\n' "$idx" "$node" "$delay_label"
+  fi
 }
 
 proxy_pick_group_interactive() {
@@ -7652,7 +8045,8 @@ cmd_proxy_current() {
 
 cmd_proxy_nodes() {
   local group="$1"
-  local current node found="false"
+  local current node delay delay_label found="false"
+  local -A delays=()
 
   prepare
   [ -n "${group:-}" ] || die "请使用 clashctl select 切换节点"
@@ -7672,13 +8066,19 @@ cmd_proxy_nodes() {
   ui_kv "🚀" "当前节点" "${current:-<unknown>}"
   ui_blank
 
+  while IFS=$'\t' read -r node delay; do
+    [ -n "${node:-}" ] || continue
+    delays["$node"]="$delay"
+  done < <(proxy_group_nodes_delay_map "$group")
+
   while IFS= read -r node; do
     [ -n "${node:-}" ] || continue
     found="true"
+    delay_label="$(proxy_delay_label "${delays[$node]:-0}")"
     if [ "$node" = "$current" ]; then
-      printf '  * 🚀 %s\n' "$node"
+      printf '  * 🚀 %s %s\n' "$node" "$delay_label"
     else
-      printf '    🚀 %s\n' "$node"
+      printf '    🚀 %s %s\n' "$node" "$delay_label"
     fi
   done < <(proxy_group_selectable_nodes "$group")
 
@@ -7739,9 +8139,11 @@ proxy_pick_group_for_select() {
 
 proxy_select_interactive_guarded() {
   local group="${1:-}"
-  local current idx count total_count node selected_node
+  local current idx count total_count node selected_node delay line_index line_up prompt_gap=4 redraw="true"
   local choose_group="false"
   local -a nodes=()
+  local -A delays=()
+  local -A node_indexes=()
 
   prepare
 
@@ -7767,10 +8169,17 @@ proxy_select_interactive_guarded() {
 
     current="$(proxy_group_current_display "$group" 2>/dev/null || true)"
     nodes=()
+    delays=()
+    node_indexes=()
     while IFS= read -r node; do
       [ -n "${node:-}" ] || continue
+      node_indexes["$node"]="${#nodes[@]}"
       nodes+=("$node")
     done < <(proxy_group_selectable_nodes "$group")
+    while IFS=$'\t' read -r node delay; do
+      [ -n "${node:-}" ] || continue
+      delays["$node"]="$delay"
+    done < <(proxy_group_nodes_delay_map "$group")
 
     count="${#nodes[@]}"
     if [ "$count" -le 0 ]; then
@@ -7786,36 +8195,61 @@ proxy_select_interactive_guarded() {
     fi
 
     total_count="$(select_total_node_count 2>/dev/null || true)"
+    redraw="true"
+    prompt_gap=4
 
-    echo
-    echo "📦 当前策略组：$group"
-    echo "🚀 当前节点：${current:-<unknown>}"
-    echo "📦 当前策略组候选数：$count"
-    [ -n "${total_count:-}" ] && echo "🔢 全部节点总数：$total_count"
-    echo "ℹ️ 以下仅显示当前策略组可切换节点"
-    echo
-    echo "🚀 请选择节点："
+    while true; do
+      if [ "$redraw" = "true" ]; then
+        echo
+        echo "📦 当前策略组：$group"
+        echo "🚀 当前节点：${current:-<unknown>}"
+        echo "📦 当前策略组候选数：$count"
+        [ -n "${total_count:-}" ] && echo "🔢 全部节点总数：$total_count"
+        echo "ℹ️ 以下仅显示当前策略组可切换节点；[-] 表示暂无延迟记录"
+        echo
+        echo "🚀 请选择节点："
 
-    idx=1
-    for node in "${nodes[@]}"; do
-      if [ "$node" = "$current" ]; then
-        printf '  %s) 🚀 %s [当前]\n' "$idx" "$node"
-      else
-        printf '  %s) 🚀 %s\n' "$idx" "$node"
+        idx=1
+        for node in "${nodes[@]}"; do
+          proxy_print_node_choice_line "$idx" "$node" "$current" "${delays[$node]:-0}"
+          idx=$((idx + 1))
+        done
+
+        echo "  r) 刷新延迟"
+        echo "  q) 退出"
+        echo
+        redraw="false"
       fi
-      idx=$((idx + 1))
+
+      idx="$(proxy_pick_node_index "$count")" || return 0
+      if [ "$idx" = "refresh" ]; then
+        echo "ℹ️ 正在刷新当前策略组节点延迟 ..."
+        while IFS=$'\t' read -r node delay; do
+          [ -n "${node:-}" ] || continue
+          delays["$node"]="${delay:-0}"
+          line_index="${node_indexes[$node]:-}"
+          [ -n "${line_index:-}" ] || continue
+          if [ -t 1 ]; then
+            line_up=$((count - line_index + prompt_gap + 1))
+            printf '\033[s\033[%sA\r\033[2K' "$line_up"
+            proxy_print_node_choice_line "$((line_index + 1))" "$node" "$current" "${delay:-0}"
+            printf '\033[u'
+          else
+            proxy_print_node_choice_line "$((line_index + 1))" "$node" "$current" "${delay:-0}"
+          fi
+        done < <(proxy_nodes_test_delay_map 8 "${nodes[@]}")
+        echo "✓ 刷新完成"
+        prompt_gap=$((prompt_gap + 3))
+        continue
+      fi
+
+      selected_node="${nodes[$((idx - 1))]}"
+      proxy_node_is_selectable_candidate "$selected_node" || die "节点不是可切换节点：$selected_node"
+
+      proxy_group_select "$group" "$selected_node"
+      print_select_feedback "$group"
+      return 0
     done
-
-    echo "  q) 退出"
-    echo
-
-    idx="$(proxy_pick_index "$count")" || return 0
-    selected_node="${nodes[$((idx - 1))]}"
-    proxy_node_is_selectable_candidate "$selected_node" || die "节点不是可切换节点：$selected_node"
-
-    proxy_group_select "$group" "$selected_node"
-    print_select_feedback "$group"
-    return 0
   done
 }
 
@@ -7864,6 +8298,7 @@ case "$cmd" in
   config)         cmd_config "$@" ;;
   lan)            cmd_lan "$@" ;;
   mixin)          cmd_mixin "$@" ;;
+  rule)           cmd_rule "$@" ;;
   relay)          cmd_relay "$@" ;;
   profile)        cmd_profile "$@" ;;
   sub)            cmd_sub "$@" ;;

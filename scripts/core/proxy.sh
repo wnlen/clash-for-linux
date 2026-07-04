@@ -781,6 +781,51 @@ proxy_node_test_delay() {
     | head -n 1
 }
 
+proxy_nodes_test_delay_map() {
+  local limit="$1"
+  local node delay running=0
+
+  shift || true
+  case "$limit" in
+    ""|0|*[!0-9]*) limit=8 ;;
+  esac
+
+  for node in "$@"; do
+    (
+      delay="$(proxy_node_test_delay "$node" 2>/dev/null || echo 0)"
+      printf '%s\t%s\n' "$node" "${delay:-0}"
+    ) &
+    running=$((running + 1))
+    if [ "$running" -ge "$limit" ]; then
+      wait
+      running=0
+    fi
+  done
+  wait
+}
+
+proxy_delay_label() {
+  local delay="${1:-0}"
+  local color
+
+  case "$delay" in
+    ""|0|null|*[!0-9]*)
+      printf '[-]'
+      return 0
+      ;;
+  esac
+
+  if [ "$delay" -lt 100 ]; then
+    color=32
+  elif [ "$delay" -le 300 ]; then
+    color=33
+  else
+    color=31
+  fi
+
+  printf '\033[%sm[%sms]\033[0m' "$color" "$delay"
+}
+
 proxy_group_nodes_delay_map() {
   local group="$1"
 

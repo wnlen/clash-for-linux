@@ -21,7 +21,7 @@
 - 🚀 **自动识别系统架构**：自动下载并使用对应 Clash 内核
 - 🧪 **端口自动检测与分配**：避免冲突
 - 🔄 **多订阅管理**：可以保存多个订阅，通过 `clashctl use` 切换当前主订阅。
-- 💫 **节点选择**：使用编号交互选择策略组和节点。
+- 💫 **节点选择**：使用编号交互选择策略组和节点，并显示历史延迟；可按 `r` 并发刷新当前策略组测速。
 - 🌐 **Tun 模式**：用于透明代理接管场景（需root方式安装）。
 - 🧠 **Mixin 机制**：可按需追加/覆盖 Clash 配置
 - 👤 **不同权限**：兼容 `root` 与普通用户环境。
@@ -74,6 +74,7 @@ bash install.sh
   clashctl tun       🧪 Tun 模式管理（需root方式安装）
   clashctl boot      🚦 开机代理接管管理
   clashctl mixin     🧩 Mixin 配置管理
+  clashctl rule      📜 规则管理
   clashctl relay     🔗 多跳节点管理
   clashctl sub       🧩 订阅高级管理（启用 / 禁用 / 重命名 / 删除）
   clashctl upgrade   🚀 升级当前或指定内核
@@ -395,6 +396,8 @@ clashctl mixin
 clashctl mixin edit
 clashctl mixin raw
 clashctl mixin runtime
+clashctl rule
+clashctl rule test example.com
 ```
 
 Mixin 是运行配置补丁，不是订阅管理。它优先通过 `runtime/mixin.yaml`（兼容读取 `config/mixin.yaml`）对当前 active 订阅生成的运行配置执行：
@@ -402,6 +405,9 @@ Mixin 是运行配置补丁，不是订阅管理。它优先通过 `runtime/mixi
 - `override`
 - `prepend`
 - `append`
+- `remove`
+
+规则可通过 `clashctl rule` 查看当前运行规则，并交互添加或删除规则；`clashctl rule test example.com` 可静态判断网站会命中哪条明文规则。
 
 示例：
 
@@ -421,6 +427,10 @@ append:
   proxy-groups: []
   rules:
     - MATCH,节点选择
+
+remove:
+  rules:
+    - DOMAIN,old.example,DIRECT
 ```
 
 编辑后执行：
