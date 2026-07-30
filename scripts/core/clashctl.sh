@@ -28,6 +28,8 @@ Usage:
   add local                      ➕ 从 runtime/subscriptions 导入本地订阅
   use                            💱 切换订阅
   select                         💫 切换节点
+  mode                           🧭 查看或切换路由模式
+  test                           🌐 测试当前节点访问 Google / YouTube
 
 🧩 Config:
   config                         🧩 配置编译管理
@@ -1538,6 +1540,209 @@ Notes:
   不带参数时进入交互选择。
   带参数时直接切换指定策略组到指定节点。
 EOF
+}
+
+mode_usage() {
+  cat <<'EOF'
+Usage:
+  clashctl mode
+  clashctl mode status
+  clashctl mode rule|global|direct
+
+Examples:
+  clashctl mode global
+  clashctl mode rule
+
+Notes:
+  global 模式使用 GLOBAL 策略组当前选择的策略组或节点。
+  mode 只切换 Clash 路由模式，不会开启 Tun 或系统代理。
+EOF
+}
+
+proxy_mode_label() {
+  case "${1:-}" in
+    rule) echo "规则模式（rule）" ;;
+    global) echo "全局代理（global）" ;;
+    direct) echo "全局直连（direct）" ;;
+    *) echo "${1:-unknown}" ;;
+  esac
+}
+
+cmd_mode() {
+  local action="${1:-status}"
+  local current global_current
+
+  case "$action" in
+    -h|--help|help)
+      mode_usage
+      return 0
+      ;;
+  esac
+
+  [ "$#" -le 1 ] || die_usage "mode 参数不合法" "clashctl mode [status|rule|global|direct]"
+
+  action="$(printf '%s' "$action" | tr '[:upper:]' '[:lower:]')"
+  case "$action" in
+    status|rule|global|direct)
+      ;;
+    *)
+      die_usage "未知路由模式：$action" "clashctl mode [status|rule|global|direct]"
+      ;;
+  esac
+
+  prepare
+
+  if ! status_is_running; then
+    die_state "代理内核未运行" "clashon"
+  fi
+
+  if ! proxy_controller_reachable 2>/dev/null; then
+    die_state "控制器不可访问" "clashctl doctor"
+  fi
+
+  if [ "$action" != "status" ]; then
+    if ! proxy_mode_set "$action"; then
+      die "路由模式切换失败：$action"
+    fi
+  fi
+
+  current="$(proxy_mode_current 2>/dev/null || true)"
+  [ -n "${current:-}" ] && [ "$current" != "null" ] || die "无法读取当前路由模式"
+
+  if [ "$action" != "status" ] && [ "$current" != "$action" ]; then
+    die "路由模式切换未生效：期望 $action，实际 $current"
+  fi
+
+  if [ "$action" = "status" ]; then
+    ui_title "🧭 当前路由模式"
+  else
+    ui_title "🧭 路由模式切换完成"
+  fi
+  ui_kv "🧭" "当前模式" "$(proxy_mode_label "$current")"
+
+  if [ "$current" = "global" ]; then
+    global_current="$(proxy_group_current "GLOBAL" 2>/dev/null || true)"
+    if [ -n "${global_current:-}" ]; then
+      ui_kv "🚀" "GLOBAL 当前选择" "$global_current"
+    else
+      ui_warn "未读取到 GLOBAL 当前选择，请执行 clashctl select 检查"
+    fi
+    ui_next "clashctl select \"GLOBAL\" \"<策略组或节点>\""
+  else
+    ui_next "clashctl status"
+  fi
+  ui_blank
+}
+
+test_usage() {
+  cat <<'EOF'
+Usage:
+  clashctl test
+  clashctl test <策略组>
+  clashtest [策略组]
+
+Examples:
+  clashctl test
+  clashctl test "节点选择"
+
+Notes:
+  默认测试当前路由模式对应的策略组当前选择。
+  测试不会切换节点；任一目标不可访问时命令返回非零状态。
+EOF
+}
+
+print_connectivity_test_result() {
+  local label="$1"
+  local node="$2"
+  local url="$3"
+  local delay
+
+  delay="$(proxy_node_test_delay "$node" "$url" 8000 2>/dev/null || true)"
+  case "${delay:-}" in
+    ''|*[!0-9]*|0)
+      printf '  ❌ %-10s 不可访问\n' "$label"
+      return 1
+      ;;
+    *)
+      printf '  ✅ %-10s 可访问（%s ms）\n' "$label" "$delay"
+      return 0
+      ;;
+  esac
+}
+
+cmd_test() {
+  local requested_group="${1:-}"
+  local mode group node
+  local failed=0
+
+  case "$requested_group" in
+    -h|--help|help)
+      test_usage
+      return 0
+      ;;
+  esac
+
+  [ "$#" -le 1 ] || die_usage "test 参数不合法" "clashctl test [策略组]"
+
+  prepare
+
+  if ! status_is_running; then
+    die_state "代理内核未运行" "clashon"
+  fi
+
+  if ! proxy_controller_reachable 2>/dev/null; then
+    die_state "控制器不可访问" "clashctl doctor"
+  fi
+
+  mode="$(proxy_mode_current 2>/dev/null || true)"
+  case "$requested_group" in
+    "")
+      case "$mode" in
+        global)
+          group="GLOBAL"
+          ;;
+        direct)
+          group="DIRECT"
+          ;;
+        *)
+          group="$(default_proxy_group_name 2>/dev/null || true)"
+          ;;
+      esac
+      ;;
+    *)
+      group="$requested_group"
+      ;;
+  esac
+
+  [ -n "${group:-}" ] || die "未找到可测试的策略组"
+
+  if [ "$group" = "DIRECT" ]; then
+    node="DIRECT"
+  else
+    proxy_group_exists "$group" || die "策略组不存在：$group"
+    node="$(proxy_group_current "$group" 2>/dev/null || true)"
+  fi
+  [ -n "${node:-}" ] && [ "$node" != "null" ] || die "未读取到策略组当前选择：$group"
+
+  ui_title "🌐 节点连通性测试"
+  ui_kv "🧭" "路由模式" "$(proxy_mode_label "$mode")"
+  ui_kv "📦" "测试策略组" "$group"
+  ui_kv "🚀" "当前选择" "$node"
+  ui_blank
+
+  print_connectivity_test_result "Google" "$node" "https://www.gstatic.com/generate_204" || failed=$((failed + 1))
+  print_connectivity_test_result "YouTube" "$node" "https://www.youtube.com/generate_204" || failed=$((failed + 1))
+  ui_blank
+
+  if [ "$failed" -gt 0 ]; then
+    ui_warn "${failed} 个目标不可访问"
+    ui_next "clashctl select"
+    ui_blank
+    return 1
+  fi
+
+  ui_ok "当前选择可访问全部测试目标"
+  ui_blank
 }
 
 print_sub_enable_feedback() {
@@ -3073,6 +3278,8 @@ cmd_ui_help_summary() {
   printf '  %-18s %s\n' "clashon" "🚀 开启代理"
   printf '  %-18s %s\n' "clashoff" "⛔ 关闭代理"
   printf '  %-18s %s\n' "clashctl select" "💫 选择节点"
+  printf '  %-18s %s\n' "clashctl mode" "🧭 查看或切换路由模式"
+  printf '  %-18s %s\n' "clashtest" "🌐 测试当前节点连通性"
   echo "🕹️  控制台"
   printf '  %-18s %s\n' "clashui" "🕹️  查看 Web 控制台"
   printf '  %-18s %s\n' "clashsecret" "🔑 查看或设置 Web 密钥"
@@ -7859,6 +8066,8 @@ case "$cmd" in
   ls)             cmd_ls "$@" ;;
   health)         cmd_health "$@" ;;
   select)         cmd_select "$@" ;;
+  mode)           cmd_mode "$@" ;;
+  test)           cmd_test "$@" ;;
   on)             cmd_on "$@" ;;
   off)            cmd_off "$@" ;;
   status)         cmd_status "$@" ;;

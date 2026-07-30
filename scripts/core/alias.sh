@@ -404,6 +404,10 @@ clashselect() {
   clashctl select "$@"
 }
 
+clashtest() {
+  clashctl test "$@"
+}
+
 clashui() {
   clashctl ui "$@"
 }

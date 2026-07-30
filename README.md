@@ -59,6 +59,8 @@ bash install.sh
   clashon              🚀 开启代理
   clashoff             ⛔ 关闭代理
   clashctl select      💫 选择节点
+  clashctl mode        🧭 查看或切换路由模式
+  clashtest            🌐 测试当前节点访问 Google / YouTube
 🕹️  控制台
   clashui              🕹️  查看 Web 控制台
 📦 订阅
@@ -84,6 +86,26 @@ bash install.sh
 
 💡 显示更多帮助命令：clashctl -h
 ```
+
+------
+
+## 🧭 路由模式与节点连通性
+
+```bash
+clashctl mode
+clashctl mode global
+clashctl mode rule
+clashctl mode direct
+
+clashctl test
+clashtest
+clashtest "节点选择"
+```
+
+- `clashctl mode` 查看当前的 Clash 路由模式，支持切换 `rule`、`global`、`direct`。
+- `global` 模式使用 `GLOBAL` 策略组当前选择的策略组或节点；如需调整可执行 `clashctl select`。
+- `clashctl test` 与 `clashtest` 等价，默认测试当前路由模式对应的策略组当前选择能否访问 Google 和 YouTube，并显示延迟。
+- 连通性测试不会切换节点；任一目标不可访问时命令返回非零状态，便于脚本判断。
 
 ------
 

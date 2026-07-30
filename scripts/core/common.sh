@@ -2602,6 +2602,7 @@ install_alias_command_wrappers() {
     clashsub \
     clashls \
     clashselect \
+    clashtest \
     clashui \
     clashsecret \
     clashtun \
@@ -2901,6 +2902,7 @@ remove_alias_command_wrappers() {
     clashsub \
     clashls \
     clashselect \
+    clashtest \
     clashui \
     clashsecret \
     clashtun \

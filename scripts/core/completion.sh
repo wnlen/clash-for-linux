@@ -7,6 +7,7 @@ _clash_for_linux_runtime_dir="${_clash_for_linux_project_dir}/runtime"
 _clash_for_linux_subscription_file="${_clash_for_linux_runtime_dir}/subscriptions.yaml"
 _clash_for_linux_mixin_file="${_clash_for_linux_runtime_dir}/mixin.yaml"
 _clash_for_linux_local_subscription_dir="${_clash_for_linux_runtime_dir}/subscriptions"
+_clash_for_linux_runtime_config_file="${_clash_for_linux_runtime_dir}/config.yaml"
 _clash_for_linux_yq_bin="${_clash_for_linux_runtime_dir}/bin/yq"
 
 # Hard constraints for completion:
@@ -60,6 +61,17 @@ _clash_for_linux_add_relay_matches() {
 
   _clash_for_linux_add_stream_matches "$cur" < <(
     "$_clash_for_linux_yq_bin" eval '(.append["proxy-groups"] // [])[] | select(.type == "relay") | .name' "$_clash_for_linux_mixin_file" 2>/dev/null
+  )
+}
+
+_clash_for_linux_add_proxy_group_matches() {
+  local cur="$1"
+
+  [ -x "$_clash_for_linux_yq_bin" ] || return 0
+  [ -s "$_clash_for_linux_runtime_config_file" ] || return 0
+
+  _clash_for_linux_add_stream_matches "$cur" < <(
+    "$_clash_for_linux_yq_bin" eval '(.["proxy-groups"] // [])[].name' "$_clash_for_linux_runtime_config_file" 2>/dev/null
   )
 }
 
@@ -130,6 +142,26 @@ _clash_for_linux_complete_status() {
 
   COMPREPLY=()
   _clash_for_linux_add_matches "$cur" --verbose -v
+}
+
+_clash_for_linux_complete_mode() {
+  local cur="$1"
+
+  COMPREPLY=()
+  _clash_for_linux_add_matches "$cur" status rule global direct help -h --help
+}
+
+_clash_for_linux_complete_test() {
+  local cur="$1"
+
+  COMPREPLY=()
+  _clash_for_linux_add_matches "$cur" help -h --help
+
+  case "$cur" in
+    -*) return 0 ;;
+  esac
+
+  _clash_for_linux_add_proxy_group_matches "$cur"
 }
 
 _clash_for_linux_complete_boot() {
@@ -314,7 +346,7 @@ _clash_for_linux_complete_top_level() {
 
   COMPREPLY=()
   _clash_for_linux_add_matches "$cur" \
-    add use ls health select on off status status-next \
+    add use ls health select mode test on off status status-next \
     boot log logs doctor ui secret tun dev config lan mixin \
     relay profile sub proxy upgrade update completion help \
     -h --help
@@ -345,6 +377,11 @@ _clash_for_linux_complete_command() {
       arg1="${COMP_WORDS[1]:-}"
       arg2="${COMP_WORDS[2]:-}"
       arg3="${COMP_WORDS[3]:-}"
+      ;;
+    clashtest)
+      canonical="test"
+      rel_index=$COMP_CWORD
+      arg1="${COMP_WORDS[1]:-}"
       ;;
     clashrelay)
       canonical="relay"
@@ -383,6 +420,8 @@ _clash_for_linux_complete_command() {
     add) _clash_for_linux_complete_add "$cur" "$rel_index" "$arg1" ;;
     use) _clash_for_linux_complete_use "$cur" ;;
     health) _clash_for_linux_complete_health "$cur" ;;
+    mode) _clash_for_linux_complete_mode "$cur" ;;
+    test) _clash_for_linux_complete_test "$cur" ;;
     status) _clash_for_linux_complete_status "$cur" ;;
     boot) _clash_for_linux_complete_boot "$cur" "$rel_index" "$arg1" ;;
     config) _clash_for_linux_complete_config "$cur" "$rel_index" "$arg1" ;;
@@ -403,6 +442,7 @@ _clash_for_linux_complete_command() {
 }
 
 complete -F _clash_for_linux_complete_command clashctl
+complete -F _clash_for_linux_complete_command clashtest
 complete -F _clash_for_linux_complete_command clashsub
 complete -F _clash_for_linux_complete_command clashrelay
 complete -F _clash_for_linux_complete_command clashmixin

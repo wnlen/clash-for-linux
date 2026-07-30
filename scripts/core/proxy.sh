@@ -267,6 +267,27 @@ proxy_controller_reachable() {
     controller_curl GET "/version" >/dev/null 2>&1
 }
 
+proxy_mode_current() {
+  controller_curl GET "/configs" \
+    | "$(yq_bin)" -p=json eval '.mode // ""' - 2>/dev/null \
+    | tr '[:upper:]' '[:lower:]' \
+    | head -n 1
+}
+
+proxy_mode_set() {
+  local mode="$1"
+
+  case "$mode" in
+    rule|global|direct)
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+
+  controller_curl PATCH "/configs" "{\"mode\":\"$mode\"}" >/dev/null
+}
+
 proxy_groups_json() {
   controller_curl GET "/proxies"
 }
@@ -771,12 +792,14 @@ proxy_node_test_delay() {
   local node="$1"
   local url="${2:-http://www.gstatic.com/generate_204}"
   local timeout_ms="${3:-3000}"
-  local encoded_node
+  local encoded_node encoded_url path
 
   [ -n "${node:-}" ] || return 1
   encoded_node="$(proxy_node_url_encode "$node")"
+  encoded_url="$(proxy_node_url_encode "$url")"
+  path="/proxies/${encoded_node}/delay?timeout=${timeout_ms}&url=${encoded_url}"
 
-  controller_curl GET "/proxies/${encoded_node}/delay?timeout=${timeout_ms}&url=${url}" 2>/dev/null \
+  controller_curl GET "$path" 2>/dev/null \
     | "$(yq_bin)" -p=json eval '.delay // 0' - 2>/dev/null \
     | head -n 1
 }
