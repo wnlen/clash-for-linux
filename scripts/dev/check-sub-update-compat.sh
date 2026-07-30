@@ -19,7 +19,7 @@ calls_file="$tmp_dir/sub-update-calls"
 output_file="$tmp_dir/sub-update-output"
 
 prepare() { :; }
-regenerate_config() { printf 'regenerate\n' >> "$calls_file"; }
+regenerate_config() { printf 'regenerate:%s\n' "${1:-}" >> "$calls_file"; }
 apply_runtime_change_after_config_mutation() { printf 'apply\n' >> "$calls_file"; }
 print_config_regen_feedback() { printf 'regen-feedback\n' >> "$calls_file"; }
 print_config_apply_feedback() { printf 'apply-feedback\n' >> "$calls_file"; }
@@ -31,7 +31,7 @@ if ! ( cmd_sub update ) > "$output_file" 2>&1; then
   exit 1
 fi
 
-expected_calls="$(printf '%s\n' regenerate apply regen-feedback apply-feedback)"
+expected_calls="$(printf '%s\n' regenerate:manual-refresh apply regen-feedback apply-feedback)"
 actual_calls="$(cat "$calls_file")"
 if [ "$actual_calls" != "$expected_calls" ]; then
   echo "not ok - clashctl sub update should follow the config regen path" >&2
@@ -40,6 +40,7 @@ if [ "$actual_calls" != "$expected_calls" ]; then
 fi
 
 echo "ok - clashctl sub update follows the config regen path"
+echo "ok - clashctl sub update bypasses stale subscription cache"
 
 # Verify both the sourced-shell compatibility function and the installed command wrapper.
 # shellcheck source=../core/common.sh
