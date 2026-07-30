@@ -35,6 +35,7 @@ Usage:
   mixin                          🧩 Mixin 配置管理
   relay                          🔗 多跳节点管理
   lan                            🏠 局域网代理管理
+  ipv6                           🌐 IPv6 / IPv6-only 节点管理
   
 
 📦 Subscription:
@@ -47,6 +48,7 @@ Usage:
   clashui                        🕹️  查看 Web 控制台
   secret                         🔑 查看或设置 Web 密钥
   lan on|off|status              🏠 开启 / 关闭局域网代理
+  ipv6 on|off|auto|status        🌐 管理内核与 DNS IPv6
 
 🧪 Transparent proxy:
   tun                            🧪 Tun 模式管理
@@ -3083,6 +3085,7 @@ cmd_ui_help_summary() {
   printf '  %-18s %s\n' "clashctl ls" "📜 查看订阅列表"
   echo "📌 高级"
   printf '  %-18s %s\n' "clashctl lan" "🏠 局域网代理管理"
+  printf '  %-18s %s\n' "clashctl ipv6" "🌐 IPv6 / IPv6-only 节点管理"
   printf '  %-18s %s\n' "clashctl tun" "🧪 Tun 模式管理"
   printf '  %-18s %s\n' "clashctl mixin" "🧩 Mixin 配置管理"
   printf '  %-18s %s\n' "clashctl sub" "🧩 订阅高级管理（启用 / 禁用 / 重命名 / 删除）"
@@ -4186,6 +4189,84 @@ cmd_lan() {
       ;;
     *)
       die_usage "未知的 lan 子命令：$action" "clashctl lan on|off|status"
+      ;;
+  esac
+}
+
+print_ipv6_status() {
+  local mode mode_text kernel_ipv6 dns_ipv6 kernel
+
+  mode="$(config_ipv6_mode)"
+  kernel_ipv6="$(runtime_config_ipv6_enabled 2>/dev/null || echo "等待运行配置生成")"
+  dns_ipv6="$(runtime_config_dns_ipv6_enabled 2>/dev/null || echo "等待运行配置生成")"
+  kernel="$(runtime_kernel_type 2>/dev/null || echo unknown)"
+
+  case "$mode" in
+    true) mode_text="已开启" ;;
+    false) mode_text="已关闭" ;;
+    *) mode_text="自动（保留订阅设置）" ;;
+  esac
+
+  ui_title "🌐 IPv6"
+  ui_kv "🔧" "配置模式" "$mode_text"
+  ui_kv "🚀" "当前内核" "$kernel"
+  ui_kv "🌐" "内核 IPv6" "$kernel_ipv6"
+  ui_kv "🔎" "DNS AAAA" "$dns_ipv6"
+  if [ "$kernel" != "mihomo" ]; then
+    ui_warn "Hysteria2 建议使用 Mihomo：clashctl config kernel mihomo"
+  fi
+  ui_blank
+}
+
+cmd_ipv6() {
+  local action
+  prepare
+
+  action="${1:-status}"
+  case "$action" in
+    on|enable)
+      set_config_ipv6_mode true
+      regenerate_config
+      apply_runtime_change_after_config_mutation
+      success "IPv6 与 DNS AAAA 已开启"
+      print_ipv6_status
+      print_config_apply_feedback
+      ;;
+    off|disable)
+      set_config_ipv6_mode false
+      regenerate_config
+      apply_runtime_change_after_config_mutation
+      success "IPv6 与 DNS AAAA 已关闭"
+      print_ipv6_status
+      print_config_apply_feedback
+      ;;
+    auto|reset)
+      set_config_ipv6_mode auto
+      regenerate_config
+      apply_runtime_change_after_config_mutation
+      success "IPv6 已恢复为自动模式"
+      print_ipv6_status
+      print_config_apply_feedback
+      ;;
+    status)
+      print_ipv6_status
+      ui_next "IPv6-only / Hysteria2 节点不可用时执行：clashctl ipv6 on"
+      ui_blank
+      ;;
+    -h|--help|help)
+      echo "📜 用法："
+      echo "  clashctl ipv6 status"
+      echo "  clashctl ipv6 on"
+      echo "  clashctl ipv6 off"
+      echo "  clashctl ipv6 auto"
+      echo
+      echo "🌐 说明："
+      echo "  on   同时启用内核 IPv6 与 DNS AAAA"
+      echo "  off  同时关闭内核 IPv6 与 DNS AAAA"
+      echo "  auto 保留订阅中的 IPv6 设置，缺省时沿用兼容默认值"
+      ;;
+    *)
+      die_usage "未知的 ipv6 子命令：$action" "clashctl ipv6 on|off|auto|status"
       ;;
   esac
 }
@@ -7872,6 +7953,7 @@ case "$cmd" in
   dev)            cmd_dev "$@" ;;
   config)         cmd_config "$@" ;;
   lan)            cmd_lan "$@" ;;
+  ipv6)           cmd_ipv6 "$@" ;;
   mixin)          cmd_mixin "$@" ;;
   relay)          cmd_relay "$@" ;;
   profile)        cmd_profile "$@" ;;

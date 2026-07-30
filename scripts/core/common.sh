@@ -1796,6 +1796,32 @@ runtime_config_allow_lan() {
   esac
 }
 
+runtime_config_ipv6_enabled() {
+  local file
+  local value
+  file="$(runtime_config_file)"
+  [ -s "$file" ] || return 1
+
+  value="$("$(yq_bin)" eval '.ipv6' "$file" 2>/dev/null | head -n 1)"
+  case "$value" in
+    false) echo "false" ;;
+    *) echo "true" ;;
+  esac
+}
+
+runtime_config_dns_ipv6_enabled() {
+  local file
+  local value
+  file="$(runtime_config_file)"
+  [ -s "$file" ] || return 1
+
+  value="$("$(yq_bin)" eval '.dns.ipv6' "$file" 2>/dev/null | head -n 1)"
+  case "$value" in
+    true) echo "true" ;;
+    *) echo "false" ;;
+  esac
+}
+
 runtime_port_value_is_valid() {
   local port="${1:-}"
 

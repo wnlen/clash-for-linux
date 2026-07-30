@@ -71,6 +71,7 @@ bash install.sh
   clashctl secret 123  🔐 设置密钥
 📌 高级
   clashctl lan       🏠 局域网代理管理
+  clashctl ipv6      🌐 IPv6 / IPv6-only 节点管理
   clashctl tun       🧪 Tun 模式管理（需root方式安装）
   clashctl boot      🚦 开机代理接管管理
   clashctl mixin     🧩 Mixin 配置管理
@@ -131,6 +132,32 @@ clashctl lan off
 ```
 
 开启后，同一局域网设备可把 HTTP / SOCKS 代理地址设置为 `http://<本机局域网IP>:<mixed-port>`，端口默认是 `7890`；如访问不了，请检查系统防火墙是否放行该端口。
+
+------
+
+## 🌐 IPv6 / Hysteria2
+
+Mihomo 支持 Hysteria2。若节点服务端只有 IPv6 地址，需要同时启用内核 IPv6 与 DNS AAAA：
+
+```bash
+clashctl config kernel mihomo
+clashctl ipv6 on
+clashctl ipv6 status
+```
+
+其他可用操作：
+
+```bash
+clashctl ipv6 off
+clashctl ipv6 auto
+```
+
+- `on`：同时写入 `ipv6: true` 和 `dns.ipv6: true`。
+- `off`：同时关闭内核 IPv6 与 DNS AAAA。
+- `auto`：保留订阅原有的 IPv6 设置；订阅未配置时继续使用兼容默认值。
+- 使用 IPv6-only 节点前，宿主机仍需具备可用的 IPv6 默认路由。HY2 使用 UDP / QUIC，网络或防火墙也必须允许相应 UDP 流量。
+
+也可以在 `.env` 中设置 `CLASH_IPV6=true`、`false` 或 `auto`，然后执行 `clashctl config regen`。
 
 ------
 
@@ -297,12 +324,14 @@ CLASH_DOWNLOAD_BASE=https://github.com/WindSpiritSR/clash/releases/download
 CLASH_BUNDLED_ASSET_ENABLED=true
 CLASH_SHELL_AUTO_RESTORE_PROXY=true
 CLASH_PREDOWNLOAD_GEO=true
+CLASH_IPV6=auto
 ```
 
 按需设置即可，不需要每项都写。
 
 - `CLASH_SHELL_AUTO_RESTORE_PROXY`：控制登录 Shell 是否自动恢复上次 `clashon` 写入的代理变量。默认 `true` 保持兼容；如果不希望 SSH 远程登录后自动带上 `http_proxy` / `https_proxy`，设为 `false`，之后仍可手动执行 `clashon`。
 - `CLASH_PREDOWNLOAD_GEO`：控制安装期是否预下载 GEO 数据。默认 `true`，会提前下载 `Country.mmdb`、`geoip.metadb`、`GeoIP.dat`、`GeoSite.dat` 等规则分流常用资源；临时部署、只想先跑起来时可设为 `false` 跳过安装期预下载。注意：当最终运行配置实际使用 `GEOIP` 规则时，启动前仍会按需准备 `Country.mmdb`，否则 Mihomo 无法可靠加载该配置。
+- `CLASH_IPV6`：可设为 `true`、`false` 或 `auto`。`true` 同时启用内核 IPv6 与 DNS AAAA，适用于 IPv6-only 节点；`auto` 保留订阅中的 IPv6 设置。
 
 #### GitHub 下载加速
 

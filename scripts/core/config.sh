@@ -276,6 +276,46 @@ config_bool_env_value() {
   esac
 }
 
+config_ipv6_mode() {
+  local value
+
+  value="${CLASH_IPV6:-}"
+  [ -n "${value:-}" ] || value="$(read_env_value "CLASH_IPV6" 2>/dev/null || true)"
+
+  case "${value:-auto}" in
+    true|1|yes|on)
+      echo "true"
+      ;;
+    false|0|no|off)
+      echo "false"
+      ;;
+    auto|"")
+      echo "auto"
+      ;;
+    *)
+      echo "auto"
+      ;;
+  esac
+}
+
+set_config_ipv6_mode() {
+  local mode="$1"
+
+  case "$mode" in
+    true|false)
+      write_env_value "CLASH_IPV6" "$mode"
+      export CLASH_IPV6="$mode"
+      ;;
+    auto)
+      unset_env_value "CLASH_IPV6" || true
+      unset CLASH_IPV6 2>/dev/null || true
+      ;;
+    *)
+      die "IPv6 模式只允许 true / false / auto"
+      ;;
+  esac
+}
+
 tun_auto_route() {
   config_bool_env_value "CLASH_TUN_AUTO_ROUTE" "true"
 }
@@ -801,7 +841,8 @@ normalize_runtime_config() {
   local file="$1"
   local mixed_port controller tun_enable_value tun_stack_value dns_port_value controller_secret_value
   local tun_auto_route_value tun_auto_redirect_value tun_strict_route_value tun_dns_hijack_value
-  local dashboard_dir_value dashboard_url_value allow_lan_value
+  local dashboard_dir_value dashboard_url_value allow_lan_value ipv6_mode_value
+  local ipv6_value dns_ipv6_value
   local resolved_ports err_file output
 
   [ -s "$file" ] || die "待规范化的配置文件不存在：$file"
@@ -822,11 +863,27 @@ normalize_runtime_config() {
   dashboard_dir_value="$(runtime_dashboard_dir)"
   dashboard_url_value="$DEFAULT_DASHBOARD_UI_URL"
   allow_lan_value="$(config_allow_lan 2>/dev/null || echo true)"
+  ipv6_mode_value="$(config_ipv6_mode)"
+
+  case "$ipv6_mode_value" in
+    true|false)
+      ipv6_value="$ipv6_mode_value"
+      dns_ipv6_value="$ipv6_mode_value"
+      ;;
+    *)
+      ipv6_value="$("$(yq_bin)" eval '.ipv6' "$file" 2>/dev/null | head -n 1 || true)"
+      dns_ipv6_value="$("$(yq_bin)" eval '.dns.ipv6' "$file" 2>/dev/null | head -n 1 || true)"
+      case "$ipv6_value" in true|false) ;; *) ipv6_value="true" ;; esac
+      case "$dns_ipv6_value" in true|false) ;; *) dns_ipv6_value="false" ;; esac
+      ;;
+  esac
 
   err_file="$(mktemp)"
   if ! mixed_port="$mixed_port" \
     controller="$controller" \
     allow_lan_value="$allow_lan_value" \
+    ipv6_value="$ipv6_value" \
+    dns_ipv6_value="$dns_ipv6_value" \
     tun_enable_value="$tun_enable_value" \
     tun_stack_value="$tun_stack_value" \
     tun_auto_route_value="$tun_auto_route_value" \
@@ -847,6 +904,7 @@ normalize_runtime_config() {
       .["allow-lan"] = (env(allow_lan_value) == "true") |
       .mode = "rule" |
       .["log-level"] = (.["log-level"] // "info") |
+      .ipv6 = (env(ipv6_value) == "true") |
 
       .tun.enable = (env(tun_enable_value) == "true") |
       .tun.stack = env(tun_stack_value) |
@@ -858,7 +916,7 @@ normalize_runtime_config() {
 
       .dns.enable = (.dns.enable // true) |
       .dns["enhanced-mode"] = (.dns["enhanced-mode"] // "fake-ip") |
-      .dns.ipv6 = false |
+      .dns.ipv6 = (env(dns_ipv6_value) == "true") |
       .dns.listen = env(dns_listen_value) |
 
       .proxies = (.proxies // []) |
