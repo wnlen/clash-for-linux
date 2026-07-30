@@ -12,10 +12,20 @@ source "$PROJECT_DIR/scripts/init/systemd-user.sh"
 source "$PROJECT_DIR/scripts/init/script.sh"
 
 init_project_context "$PROJECT_DIR"
-guard_unsafe_sudo_auto_install "${1:-}"
+parse_install_options "$@"
+
+if [ "$INSTALL_SHOW_HELP" = "true" ]; then
+  print_install_usage
+  exit 0
+fi
+
+guard_unsafe_sudo_auto_install "$INSTALL_REQUESTED_SCOPE"
 load_env_if_exists
+if [ "$INSTALL_OFFLINE_REQUESTED" = "true" ]; then
+  export CLASH_OFFLINE="true"
+fi
 migrate_env_legacy_compat_fields "$PROJECT_DIR/.env"
-detect_install_scope "${1:-auto}"
+detect_install_scope "$INSTALL_REQUESTED_SCOPE"
 ensure_project_not_wsl_windows_mount
 
 ensure_openwrt_install_supported
@@ -23,6 +33,7 @@ ensure_required_commands
 
 init_layout
 ensure_dashboard_deploy_prerequisites
+preflight_offline_assets
 
 resolve_geo_assets
 

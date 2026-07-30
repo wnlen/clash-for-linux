@@ -13,10 +13,256 @@ GEO_ASSET_DOWNLOADS=(
   "resources/geo/GeoSite.dat https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
 )
 
-resolve_geo_assets() {
+geo_predownload_enabled() {
   case "${CLASH_PREDOWNLOAD_GEO:-true}" in
-    0|false|no|off|disable|disabled|FALSE|NO|OFF) return 0 ;;
+    0|false|no|off|disable|disabled|FALSE|NO|OFF) return 1 ;;
+    *) return 0 ;;
   esac
+}
+
+yq_asset_file() {
+  case "$1" in
+    amd64) echo "yq_linux_amd64.tar.gz" ;;
+    arm64) echo "yq_linux_arm64.tar.gz" ;;
+    armv7) echo "yq_linux_arm.tar.gz" ;;
+    *) die "暂不支持的 yq 架构：$1" ;;
+  esac
+}
+
+mihomo_asset_file() {
+  local arch="$1"
+  local version="$2"
+
+  case "$arch" in
+    amd64) echo "mihomo-linux-amd64-compatible-${version}.gz" ;;
+    arm64) echo "mihomo-linux-arm64-${version}.gz" ;;
+    armv7) echo "mihomo-linux-armv7-${version}.gz" ;;
+    *) die "暂不支持的 Mihomo 架构：$arch" ;;
+  esac
+}
+
+subconverter_asset_file() {
+  case "$1" in
+    amd64) echo "subconverter_linux64.tar.gz" ;;
+    arm64) echo "subconverter_aarch64.tar.gz" ;;
+    armv7) echo "subconverter_armv7.tar.gz" ;;
+    *) die "暂不支持的 subconverter 架构：$1" ;;
+  esac
+}
+
+clash_asset_candidates() {
+  local arch="$1"
+  local version="$2"
+  local version_no_v="${version#v}"
+
+  case "$arch" in
+    amd64)
+      printf '%s\n' \
+        "clash-linux-amd64-${version}.gz" \
+        "clash-linux-amd64-v${version_no_v}.gz"
+      ;;
+    arm64)
+      printf '%s\n' \
+        "clash-linux-arm64-${version}.gz" \
+        "clash-linux-arm64-v${version_no_v}.gz" \
+        "clash-linux-armv8-${version}.gz" \
+        "clash-linux-armv8-v${version_no_v}.gz"
+      ;;
+    armv7)
+      printf '%s\n' \
+        "clash-linux-armv7-${version}.gz" \
+        "clash-linux-armv7-v${version_no_v}.gz"
+      ;;
+    *)
+      die "暂不支持的 Clash 架构：$arch"
+      ;;
+  esac
+}
+
+verify_offline_asset_bundle_metadata() {
+  local manifest checksums metadata_root actual expected kernel
+  local failed="false"
+
+  manifest="$(bundled_asset_manifest_file 2>/dev/null || true)"
+  checksums="$(bundled_asset_checksums_file 2>/dev/null || true)"
+  metadata_root="$(bundled_asset_metadata_root 2>/dev/null || true)"
+
+  if [ -n "${manifest:-}" ] && [ -f "$manifest" ]; then
+    actual="$(read_bundled_asset_manifest_value "BUNDLE_ARCH" 2>/dev/null || true)"
+    expected="$(get_arch)"
+    if [ -n "${actual:-}" ] && [ "$actual" != "$expected" ]; then
+      error "离线资源包架构不匹配：资源包=$actual，目标=$expected"
+      failed="true"
+    fi
+
+    actual="$(read_bundled_asset_manifest_value "YQ_VERSION" 2>/dev/null || true)"
+    expected="${YQ_VERSION:-$DEFAULT_YQ_VERSION}"
+    if [ -n "${actual:-}" ] && [ "$actual" != "$expected" ]; then
+      error "离线资源包 yq 版本不匹配：资源包=$actual，目标=$expected"
+      failed="true"
+    fi
+
+    actual="$(read_bundled_asset_manifest_value "SUBCONVERTER_VERSION" 2>/dev/null || true)"
+    expected="${SUBCONVERTER_VERSION:-$DEFAULT_SUBCONVERTER_VERSION}"
+    if [ -n "${actual:-}" ] && [ "$actual" != "$expected" ]; then
+      error "离线资源包 subconverter 版本不匹配：资源包=$actual，目标=$expected"
+      failed="true"
+    fi
+
+    kernel="$(runtime_kernel_type)"
+    case "$kernel" in
+      mihomo)
+        actual="$(read_bundled_asset_manifest_value "MIHOMO_VERSION" 2>/dev/null || true)"
+        expected="${MIHOMO_VERSION:-$DEFAULT_MIHOMO_VERSION}"
+        ;;
+      clash)
+        actual="$(read_bundled_asset_manifest_value "CLASH_VERSION" 2>/dev/null || true)"
+        expected="${CLASH_VERSION:-$DEFAULT_CLASH_VERSION}"
+        ;;
+      *)
+        actual=""
+        expected=""
+        ;;
+    esac
+
+    if [ -n "${actual:-}" ] && [ "$actual" != "$expected" ]; then
+      error "离线资源包 $kernel 版本不匹配：资源包=$actual，目标=$expected"
+      failed="true"
+    fi
+  fi
+
+  if [ -n "${checksums:-}" ] && [ -f "$checksums" ]; then
+    if command -v sha256sum >/dev/null 2>&1; then
+      if ! (cd "$metadata_root" && sha256sum -c "$(basename "$checksums")" >/dev/null); then
+        error "离线资源包 SHA256 校验失败：$checksums"
+        failed="true"
+      fi
+    elif command -v shasum >/dev/null 2>&1; then
+      if ! (cd "$metadata_root" && shasum -a 256 -c "$(basename "$checksums")" >/dev/null); then
+        error "离线资源包 SHA256 校验失败：$checksums"
+        failed="true"
+      fi
+    else
+      warn "系统缺少 sha256sum/shasum，已跳过离线资源包完整性校验"
+    fi
+  fi
+
+  [ "$failed" = "false" ]
+}
+
+offline_asset_missing_text() {
+  local category="$1"
+  local version="$2"
+  local file="$3"
+  local label="$4"
+
+  if [ -n "${CLASH_BUNDLED_ASSET_DIR:-}" ]; then
+    printf '%s：%s/%s/%s（版本 %s）' \
+      "$label" "${CLASH_BUNDLED_ASSET_DIR%/}" "$category" "$file" "$version"
+    return 0
+  fi
+
+  case "$category" in
+    geo)
+      printf '%s：resources/geo/%s' "$label" "$file"
+      ;;
+    *)
+      printf '%s：resources/bin/%s/%s（版本 %s）' "$label" "$category" "$file" "$version"
+      ;;
+  esac
+}
+
+preflight_offline_assets() {
+  offline_mode_enabled || return 0
+
+  local arch kernel version file item path
+  local missing=()
+  local candidate_found="false"
+
+  arch="$(get_arch)"
+  kernel="$(runtime_kernel_type)"
+
+  ui_section "离线资源预检"
+  ui_kv "🧩" "目标架构" "$arch"
+  ui_kv "🚀" "目标内核" "$kernel"
+
+  if ! verify_offline_asset_bundle_metadata; then
+    die_state "离线资源包元数据或完整性校验失败" \
+              "请重新生成与当前架构、版本匹配的资源包"
+  fi
+
+  case "$kernel" in
+    mihomo)
+      version="${MIHOMO_VERSION:-$DEFAULT_MIHOMO_VERSION}"
+      file="$(mihomo_asset_file "$arch" "$version")"
+      if [ ! -x "$(mihomo_bin)" ] \
+        && ! find_bundled_asset "mihomo" "$version" "$file" >/dev/null 2>&1; then
+        missing+=("$(offline_asset_missing_text "mihomo" "$version" "$file" "Mihomo")")
+      fi
+      ;;
+    clash)
+      version="${CLASH_VERSION:-$DEFAULT_CLASH_VERSION}"
+      if [ ! -x "$(clash_bin)" ]; then
+        candidate_found="false"
+        while IFS= read -r file; do
+          [ -n "${file:-}" ] || continue
+          if find_bundled_asset "clash" "$version" "$file" >/dev/null 2>&1; then
+            candidate_found="true"
+            break
+          fi
+        done <<EOF
+$(clash_asset_candidates "$arch" "$version")
+EOF
+        if [ "$candidate_found" != "true" ]; then
+          file="$(clash_asset_candidates "$arch" "$version" | head -n 1)"
+          missing+=("$(offline_asset_missing_text "clash" "$version" "$file" "Clash")")
+        fi
+      fi
+      ;;
+    *)
+      missing+=("未知内核类型：$kernel")
+      ;;
+  esac
+
+  version="${YQ_VERSION:-$DEFAULT_YQ_VERSION}"
+  file="$(yq_asset_file "$arch")"
+  if [ ! -x "$(yq_bin)" ] \
+    && ! find_bundled_asset "yq" "$version" "$file" >/dev/null 2>&1; then
+    missing+=("$(offline_asset_missing_text "yq" "$version" "$file" "yq")")
+  fi
+
+  version="${SUBCONVERTER_VERSION:-$DEFAULT_SUBCONVERTER_VERSION}"
+  file="$(subconverter_asset_file "$arch")"
+  if ! { [ -x "$(subconverter_bin)" ] \
+    && [ "$(subconverter_version_file_value)" = "$version" ] \
+    && subconverter_runtime_layout_ready "$(subconverter_home)"; } \
+    && ! find_bundled_asset "subconverter" "$version" "$file" >/dev/null 2>&1; then
+    missing+=("$(offline_asset_missing_text "subconverter" "$version" "$file" "subconverter")")
+  fi
+
+  if geo_predownload_enabled; then
+    for item in "${GEO_ASSET_DOWNLOADS[@]}"; do
+      path="${item%% *}"
+      file="$(basename "$path")"
+      if [ ! -s "$RUNTIME_DIR/$file" ] \
+        && ! find_bundled_asset "geo" "latest" "$file" >/dev/null 2>&1; then
+        missing+=("$(offline_asset_missing_text "geo" "latest" "$file" "$file")")
+      fi
+    done
+  fi
+
+  if [ "${#missing[@]}" -gt 0 ]; then
+    error "离线安装缺少以下资源："
+    printf '  - %s\n' "${missing[@]}" >&2
+    die_state "离线资源预检失败，共缺少 ${#missing[@]} 项" \
+              "在联网设备执行 scripts/prefetch-assets.sh --arch $arch，再把资源包复制到目标主机并解压到项目根目录"
+  fi
+
+  success "离线资源预检通过"
+}
+
+resolve_geo_assets() {
+  geo_predownload_enabled || return 0
 
   [ -n "${PROJECT_DIR:-}" ] || return 0
 
@@ -44,12 +290,7 @@ resolve_yq() {
     return 0
   fi
 
-  case "$arch" in
-    amd64) file="yq_linux_amd64.tar.gz" ;;
-    arm64) file="yq_linux_arm64.tar.gz" ;;
-    armv7) file="yq_linux_arm.tar.gz" ;;
-    *) die "暂不支持的 yq 架构：$arch" ;;
-  esac
+  file="$(yq_asset_file "$arch")"
 
   url="https://github.com/mikefarah/yq/releases/download/${version}/${file}"
   tmp_dir="$(mktemp -d)"
@@ -86,12 +327,7 @@ resolve_mihomo() {
     return 0
   fi
 
-  case "$arch" in
-    amd64) file="mihomo-linux-amd64-compatible-${version}.gz" ;;
-    arm64) file="mihomo-linux-arm64-${version}.gz" ;;
-    armv7) file="mihomo-linux-armv7-${version}.gz" ;;
-    *) die "暂不支持的 Mihomo 架构：$arch" ;;
-  esac
+  file="$(mihomo_asset_file "$arch" "$version")"
 
   if [ -n "${custom_url:-}" ]; then
     url="$custom_url"
@@ -109,12 +345,11 @@ resolve_mihomo() {
 }
 
 resolve_clash() {
-  local arch version version_no_v url_base tmp_file url downloaded="false"
+  local arch version url_base tmp_file url downloaded="false"
   local candidates file
 
   arch="$(get_arch)"
   version="${CLASH_VERSION:-$DEFAULT_CLASH_VERSION}"
-  version_no_v="${version#v}"
   url_base="${CLASH_DOWNLOAD_BASE:-https://github.com/WindSpiritSR/clash/releases/download}"
 
   if [ -x "$(clash_bin)" ] \
@@ -123,36 +358,20 @@ resolve_clash() {
     return 0
   fi
 
-  case "$arch" in
-    amd64)
-      candidates="
-clash-linux-amd64-${version}.gz
-clash-linux-amd64-v${version_no_v}.gz
-"
-      ;;
-    arm64)
-      candidates="
-clash-linux-arm64-${version}.gz
-clash-linux-arm64-v${version_no_v}.gz
-clash-linux-armv8-${version}.gz
-clash-linux-armv8-v${version_no_v}.gz
-"
-      ;;
-    armv7)
-      candidates="
-clash-linux-armv7-${version}.gz
-clash-linux-armv7-v${version_no_v}.gz
-"
-      ;;
-    *)
-      die "暂不支持的 Clash 架构：$arch"
-      ;;
-  esac
+  candidates="$(clash_asset_candidates "$arch" "$version")"
 
   tmp_file="$(mktemp)"
   rm -f "$tmp_file"
 
   for file in $candidates; do
+    if copy_bundled_asset "clash" "$version" "$file" "$tmp_file" "clash"; then
+      downloaded="true"
+      break
+    fi
+  done
+
+  for file in $candidates; do
+    [ "$downloaded" = "false" ] || break
     url="${url_base}/${version}/${file}"
 
     if download_file "$url" "$tmp_file" "clash"; then
@@ -273,12 +492,7 @@ resolve_subconverter() {
     fi
   fi
 
-  case "$arch" in
-    amd64) file="subconverter_linux64.tar.gz" ;;
-    arm64) file="subconverter_aarch64.tar.gz" ;;
-    armv7) file="subconverter_armv7.tar.gz" ;;
-    *) die "暂不支持的 subconverter 架构：$arch" ;;
-  esac
+  file="$(subconverter_asset_file "$arch")"
 
   url="https://github.com/asdlokj1qpi233/subconverter/releases/download/${version}/${file}"
   tmp_dir="$(mktemp -d)"

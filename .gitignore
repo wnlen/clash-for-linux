@@ -8,6 +8,15 @@
 # Runtime
 runtime/
 
+# Optional offline assets
+resources/bin/mihomo/
+resources/bin/clash/
+resources/bin/yq/
+resources/bin/subconverter/
+resources/geo/
+resources/asset-manifest.env
+resources/SHA256SUMS
+
 # Local dashboard unpacked files
 resources/dashboard/dist/
 

@@ -428,16 +428,75 @@ bundled_asset_root() {
   echo "$RESOURCE_DIR/bin"
 }
 
-copy_bundled_asset() {
+bundled_asset_metadata_root() {
+  if [ -n "${CLASH_BUNDLED_ASSET_DIR:-}" ]; then
+    echo "$CLASH_BUNDLED_ASSET_DIR"
+    return 0
+  fi
+
+  [ -n "${RESOURCE_DIR:-}" ] || return 1
+  echo "$RESOURCE_DIR"
+}
+
+bundled_asset_manifest_file() {
+  local root
+
+  root="$(bundled_asset_metadata_root 2>/dev/null || true)"
+  [ -n "${root:-}" ] || return 1
+  echo "$root/asset-manifest.env"
+}
+
+bundled_asset_checksums_file() {
+  local root
+
+  root="$(bundled_asset_metadata_root 2>/dev/null || true)"
+  [ -n "${root:-}" ] || return 1
+  echo "$root/SHA256SUMS"
+}
+
+read_bundled_asset_manifest_value() {
+  local key="$1"
+  local file
+
+  file="$(bundled_asset_manifest_file 2>/dev/null || true)"
+  [ -n "${file:-}" ] && [ -f "$file" ] || return 1
+
+  sed -nE "s/^[[:space:]]*${key}=['\"]?([^'\"]*)['\"]?$/\1/p" "$file" | head -n 1
+}
+
+bundled_asset_manifest_compatible() {
+  local category="$1"
+  local version="$2"
+  local file bundle_arch bundle_version version_key
+
+  file="$(bundled_asset_manifest_file 2>/dev/null || true)"
+  [ -n "${file:-}" ] && [ -f "$file" ] || return 0
+
+  bundle_arch="$(read_bundled_asset_manifest_value "BUNDLE_ARCH" 2>/dev/null || true)"
+  if [ -n "${bundle_arch:-}" ] && [ "$bundle_arch" != "$(get_arch)" ]; then
+    return 1
+  fi
+
+  case "$category" in
+    mihomo) version_key="MIHOMO_VERSION" ;;
+    clash) version_key="CLASH_VERSION" ;;
+    yq) version_key="YQ_VERSION" ;;
+    subconverter) version_key="SUBCONVERTER_VERSION" ;;
+    *) return 0 ;;
+  esac
+
+  bundle_version="$(read_bundled_asset_manifest_value "$version_key" 2>/dev/null || true)"
+  [ -z "${bundle_version:-}" ] || [ "$bundle_version" = "$version" ]
+}
+
+find_bundled_asset() {
   local category="$1"
   local version="$2"
   local file="$3"
-  local out="$4"
-  local asset_name="${5:-$file}"
   local root candidate
 
-  [ "$category" != "clash" ] || return 1
   bundled_asset_enabled || return 1
+  bundled_asset_manifest_compatible "$category" "$version" || return 1
 
   root="$(bundled_asset_root 2>/dev/null || true)"
   [ -n "${root:-}" ] || return 1
@@ -448,16 +507,46 @@ copy_bundled_asset() {
     "$root/$file" \
     "$RESOURCE_DIR/$category/$file"; do
     [ -s "$candidate" ] || continue
-
-    mkdir -p "$(dirname "$out")"
-    if [ "$candidate" != "$out" ]; then
-      cp -f "$candidate" "$out"
-    fi
-    success "${asset_name} 已使用内置资源：$candidate"
+    echo "$candidate"
     return 0
   done
 
   return 1
+}
+
+copy_bundled_asset() {
+  local category="$1"
+  local version="$2"
+  local file="$3"
+  local out="$4"
+  local asset_name="${5:-$file}"
+  local candidate
+
+  candidate="$(find_bundled_asset "$category" "$version" "$file" 2>/dev/null || true)"
+  [ -n "${candidate:-}" ] || return 1
+
+  mkdir -p "$(dirname "$out")"
+  if [ "$candidate" != "$out" ]; then
+    cp -f "$candidate" "$out"
+  fi
+  success "${asset_name} 已使用内置资源：$candidate"
+}
+
+offline_mode_enabled() {
+  case "${CLASH_OFFLINE:-false}" in
+    true|1|yes|on|TRUE|YES|ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+offline_download_blocked() {
+  local asset_name="$1"
+  local url="${2:-}"
+  local url_hint=""
+
+  [ -n "${url:-}" ] && url_hint="；远程地址：$url"
+  die_state "离线模式禁止下载：${asset_name}${url_hint}" \
+            "请补齐离线资源包后重试，或移除 --offline / CLASH_OFFLINE=true 允许联网下载"
 }
 
 download_connect_timeout() {
@@ -934,6 +1023,10 @@ download_file() {
   local tried_urls=""
   local fetch_tmp
 
+  if offline_mode_enabled; then
+    offline_download_blocked "$asset_name" "$url"
+  fi
+
   mkdir -p "$(dirname "$out")"
   rm -f "$out" 2>/dev/null || true
 
@@ -1030,6 +1123,10 @@ download_http_fetch_to_file() {
   local connect_timeout="${4:-10}"
   local max_time="${5:-300}"
   local progress_arg="--progress-bar"
+
+  if offline_mode_enabled; then
+    offline_download_blocked "$(basename "${url%%\?*}")" "$url"
+  fi
 
   curl_download \
     "$progress_arg" \
@@ -1169,6 +1266,46 @@ guard_unsafe_sudo_auto_install() {
     die_state "检测到未受支持的安装方式：sudo bash install.sh" \
               "普通安装请执行：bash install.sh；系统级安装请显式执行：sudo bash install.sh system"
   fi
+}
+
+parse_install_options() {
+  local arg
+
+  INSTALL_REQUESTED_SCOPE="auto"
+  INSTALL_OFFLINE_REQUESTED="false"
+  INSTALL_SHOW_HELP="false"
+
+  for arg in "$@"; do
+    case "$arg" in
+      system|user|auto)
+        if [ "$INSTALL_REQUESTED_SCOPE" != "auto" ] && [ "$INSTALL_REQUESTED_SCOPE" != "$arg" ]; then
+          die_usage "安装范围不能同时指定为 $INSTALL_REQUESTED_SCOPE 和 $arg" \
+                    "用法：bash install.sh [system|user|auto] [--offline]"
+        fi
+        INSTALL_REQUESTED_SCOPE="$arg"
+        ;;
+      --offline)
+        INSTALL_OFFLINE_REQUESTED="true"
+        ;;
+      -h|--help)
+        INSTALL_SHOW_HELP="true"
+        ;;
+      *)
+        die_usage "未知安装参数：$arg" \
+                  "用法：bash install.sh [system|user|auto] [--offline]"
+        ;;
+    esac
+  done
+}
+
+print_install_usage() {
+  cat <<'EOF'
+用法：
+  bash install.sh [system|user|auto] [--offline]
+
+选项：
+  --offline  严格离线安装；缺少本地资源时直接失败，不回退联网下载
+EOF
 }
 
 detect_install_scope() {

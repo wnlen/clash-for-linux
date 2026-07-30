@@ -312,13 +312,14 @@ MIXED_PORT=7890
 EXTERNAL_CONTROLLER=0.0.0.0:9090
 CLASH_CONTROLLER_SECRET=your-secret
 CLASH_SUBSCRIPTION_URL=https://example.com/sub
-MIHOMO_VERSION=latest
-CLASH_VERSION=latest
-YQ_VERSION=v4.44.3
+MIHOMO_VERSION=v1.19.23
+CLASH_VERSION=v1.18.0
+YQ_VERSION=v4.52.4
 SUBCONVERTER_VERSION=v0.9.9
 MIHOMO_DOWNLOAD_BASE=https://github.com/MetaCubeX/mihomo/releases/download
 CLASH_DOWNLOAD_BASE=https://github.com/WindSpiritSR/clash/releases/download
 CLASH_BUNDLED_ASSET_ENABLED=true
+CLASH_OFFLINE=false
 CLASH_SHELL_AUTO_RESTORE_PROXY=true
 CLASH_PREDOWNLOAD_GEO=true
 ```
@@ -349,9 +350,7 @@ CLASH_GH_PROXY=https://ghfast.top
 
 当前正式支持的架构为 `amd64`、`arm64`、`armv7`。超出这三种架构时会明确失败，不会伪装成已支持。
 
-如果安装环境访问 GitHub 很慢，可以把 Mihomo、yq、subconverter 的刚需文件跟随项目一起分发。安装和 `clash upgrade` 会优先读取 `resources/bin` 中与当前版本、架构对应的精确文件名；本地没有对应文件时，会回退到原来的远程下载逻辑，不影响后续升级内核。
-
-Clash 仅作为兼容内核处理，固定走远程下载，不会命中 `resources/bin` 中的本地资源。
+如果安装环境访问 GitHub 很慢，可以把 Mihomo/Clash、yq、subconverter 的刚需文件跟随项目一起分发。安装和 `clash upgrade` 会优先读取 `resources/bin` 中与当前版本、架构对应的精确文件名；普通在线模式下，本地没有对应文件时会回退到远程下载。
 
 推荐路径直接放在分类目录下：
 
@@ -359,6 +358,9 @@ Clash 仅作为兼容内核处理，固定走远程下载，不会命中 `resour
 resources/bin/mihomo/mihomo-linux-amd64-compatible-v1.19.23.gz
 resources/bin/mihomo/mihomo-linux-arm64-v1.19.23.gz
 resources/bin/mihomo/mihomo-linux-armv7-v1.19.23.gz
+resources/bin/clash/clash-linux-amd64-v1.18.0.gz
+resources/bin/clash/clash-linux-arm64-v1.18.0.gz
+resources/bin/clash/clash-linux-armv7-v1.18.0.gz
 resources/bin/yq/yq_linux_amd64.tar.gz
 resources/bin/yq/yq_linux_arm64.tar.gz
 resources/bin/yq/yq_linux_arm.tar.gz
@@ -371,6 +373,39 @@ resources/geo/Country.mmdb
 版本仍由 `.env` 中的 `MIHOMO_VERSION`、`CLASH_VERSION`、`YQ_VERSION`、`SUBCONVERTER_VERSION` 控制。脚本不会扫描目录，也不会自动选择最高版本；如果升级版本，请同步放入新版本对应文件，或让脚本回退到远程下载。
 
 也可以设置 `CLASH_BUNDLED_ASSET_ENABLED=false` 强制跳过内置文件，或用 `CLASH_BUNDLED_ASSET_DIR=/path/to/assets` 指向项目外的资源目录。Mihomo、yq、subconverter 兼容旧路径 `resources/bin/<category>/<version>/<file>`。
+
+#### 离线资源包
+
+推荐在有代理或网络较好的设备上，按目标主机架构生成资源包：
+
+```bash
+# 查看将要下载的文件，不产生网络请求
+bash scripts/prefetch-assets.sh --arch amd64 --dry-run
+
+# 生成 amd64 + Mihomo 资源包
+bash scripts/prefetch-assets.sh \
+  --arch amd64 \
+  --kernel mihomo \
+  --output clash-assets-mihomo-amd64.tar.gz
+```
+
+支持的目标架构为 `amd64`、`arm64`、`armv7`。脚本默认包含内核、yq、subconverter 和五个 GEO 文件，只打包 `resources/` 静态资源，不会把本机的订阅、日志、密钥或其他 `runtime/` 状态带入资源包。压缩包同时包含版本/架构清单与 `SHA256SUMS`。
+
+把项目和资源包复制到目标主机，在项目根目录执行：
+
+```bash
+tar -xzf clash-assets-mihomo-amd64.tar.gz
+bash install.sh --offline
+```
+
+`--offline` 等价于本次安装设置 `CLASH_OFFLINE=true`。安装脚本会先集中检查架构、版本、校验和及所有必需文件；有任何缺失都会明确列出并停止，不会静默回退到 GitHub。也可以和安装范围一起使用：
+
+```bash
+bash install.sh system --offline
+bash install.sh user --offline
+```
+
+严格离线安装时，订阅也不能使用远程 URL。可暂时不配置订阅，或者提前准备 Clash YAML 并通过 `file:///绝对路径/config.yaml` 导入。使用 `--no-geo` 生成精简资源包时，目标项目还需要设置 `CLASH_PREDOWNLOAD_GEO=false`；若最终配置使用 `GEOIP`，仍须提供 `Country.mmdb`。
 
 ### `runtime/mixin.yaml`（兼容 `config/mixin.yaml`）
 
