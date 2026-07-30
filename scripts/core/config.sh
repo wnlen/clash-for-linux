@@ -119,7 +119,7 @@ http_code        : $http_code"
   detail="${detail}
 process_status   : $process_status"
   detail="${detail}
-next_step        : clashctl doctor；查看 subconverter_log 定位转换失败原因"
+next_step        : clash doctor；查看 subconverter_log 定位转换失败原因"
 
   SUBCONVERTER_LAST_ERROR_DETAIL="$detail"
   SUBCONVERTER_LAST_ERROR_SUMMARY="subconverter 转换失败：$failure_type"
@@ -1165,8 +1165,8 @@ print_subscription_health_one() {
   local name="$1"
   local status fail_count last_success last_failure last_error auto_disabled auto_disabled_at enabled_text type_text url_text
 
-  [ -n "${name:-}" ] || die_usage "订阅名称不能为空" "clashctl health <订阅名称>"
-  subscription_exists "$name" || die_missing "订阅 $name" "clashctl ls"
+  [ -n "${name:-}" ] || die_usage "订阅名称不能为空" "clash health <订阅名称>"
+  subscription_exists "$name" || die_missing "订阅 $name" "clash ls"
 
   status="$(read_subscription_health_value "$name" "STATUS" 2>/dev/null || echo "unknown")"
   fail_count="$(read_subscription_health_value "$name" "FAIL_COUNT" 2>/dev/null || echo "0")"
@@ -1310,7 +1310,7 @@ set_subscription_enabled() {
 
   file="$(subscriptions_file)"
   ensure_subscriptions_file
-  subscription_exists "$name" || die_missing "订阅 $name" "clashctl ls"
+  subscription_exists "$name" || die_missing "订阅 $name" "clash ls"
 
   case "$enabled" in
     true|false) ;;
@@ -1417,7 +1417,7 @@ print_build_explain() {
   esac
 
   echo
-  ui_next "clashctl status --verbose"
+  ui_next "clash status --verbose"
   ui_blank
 }
 
@@ -1519,16 +1519,16 @@ build_explain_next_steps() {
   failed_csv="$(build_failed_active_sources_csv)"
 
   if [ "${last_status:-}" = "success" ]; then
-    echo "👉 clashctl health"
-    echo "👉 clashctl select"
+    echo "👉 clash health"
+    echo "👉 clash select"
     return 0
   fi
 
   if [ -n "${failed_csv:-}" ]; then
-    echo "👉 clashctl health"
+    echo "👉 clash health"
   fi
 
-  echo "👉 clashctl doctor"
+  echo "👉 clash doctor"
 }
 
 runtime_config_file() {
@@ -2484,7 +2484,7 @@ set_active_subscription() {
 
   exists="$("$(yq_bin)" eval ".sources | has(\"$name\")" "$file")"
 
-  [ "$exists" = "true" ] || die_missing "订阅 $name" "clashctl ls"
+  [ "$exists" = "true" ] || die_missing "订阅 $name" "clash ls"
 
   NAME="$name" "$(yq_bin)" eval -i '
     .active = env(NAME)
@@ -2500,8 +2500,8 @@ remove_subscription() {
   file="$(subscriptions_file)"
   ensure_subscriptions_file
 
-  [ -n "${name:-}" ] || die_usage "订阅名称不能为空" "clashctl health <订阅名称>"
-  subscription_exists "$name" || die_missing "订阅 $name" "clashctl ls"
+  [ -n "${name:-}" ] || die_usage "订阅名称不能为空" "clash health <订阅名称>"
+  subscription_exists "$name" || die_missing "订阅 $name" "clash ls"
 
   if [ "$name" = "default" ]; then
     die "默认订阅不允许删除：default"
@@ -2541,8 +2541,8 @@ rename_subscription() {
   [ -n "${old_name:-}" ] || die "原订阅名称不能为空"
   [ -n "${new_name:-}" ] || die "新订阅名称不能为空"
 
-  subscription_exists "$old_name" || die_missing "订阅 $old_name" "clashctl ls"
-  subscription_exists "$new_name" && die_state "目标订阅已存在：$new_name" "clashctl ls"
+  subscription_exists "$old_name" || die_missing "订阅 $old_name" "clash ls"
+  subscription_exists "$new_name" && die_state "目标订阅已存在：$new_name" "clash ls"
 
   case "$new_name" in
     *[!A-Za-z0-9._-]*)
@@ -3039,7 +3039,7 @@ subscription_list_overview_lines() {
 }
 
 subscription_list_recommendation_lines() {
-  echo "👉 clashctl use  切换当前使用的订阅"
+  echo "👉 clash use  切换当前使用的订阅"
 }
 
 detect_subscription_format() {
@@ -3076,7 +3076,7 @@ prompt_subscription_if_needed() {
 
   if ! subscription_url_is_supported "$input_url"; then
     ui_warn "订阅链接格式不合法，已跳过"
-    ui_next "稍后执行：clashctl add <订阅链接>"
+    ui_next "稍后执行：clash add <订阅链接>"
     return 0
   fi
 
@@ -3221,7 +3221,7 @@ start_subconverter() {
   fi
   error "subconverter 启动失败"
   warn "日志：$log_file"
-  warn "下一步：请运行 clashctl doctor，或查看上述日志定位 subconverter 异常"
+  warn "下一步：请运行 clash doctor，或查看上述日志定位 subconverter 异常"
   return 1
 }
 
@@ -3618,7 +3618,7 @@ convert_subscription_via_subconverter() {
       "${http_code:-unknown}" \
       "$process_status"
     warn "日志：$log_file"
-    warn "下一步：请运行 clashctl doctor，或查看上述日志定位 subconverter 异常"
+    warn "下一步：请运行 clash doctor，或查看上述日志定位 subconverter 异常"
     rm -f "$tmp_file" "$curl_error_file" 2>/dev/null || true
     return 1
   fi
@@ -3638,7 +3638,7 @@ convert_subscription_via_subconverter() {
       "$process_status"
     warn "订阅转换失败：subconverter 返回内容为空"
     warn "日志：$log_file"
-    warn "下一步：请运行 clashctl doctor，或查看上述日志定位 subconverter 异常"
+    warn "下一步：请运行 clash doctor，或查看上述日志定位 subconverter 异常"
     rm -f "$tmp_file" 2>/dev/null || true
     return 1
   }
@@ -3675,7 +3675,7 @@ convert_subscription_via_subconverter() {
       warn "订阅转换失败：subconverter 返回内容不是合法 Clash YAML"
     fi
     warn "日志：$log_file"
-    warn "下一步：请运行 clashctl doctor，或查看上述日志定位 subconverter 异常"
+    warn "下一步：请运行 clash doctor，或查看上述日志定位 subconverter 异常"
 
     rm -f "$tmp_file" 2>/dev/null || true
     return 1

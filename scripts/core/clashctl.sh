@@ -21,7 +21,7 @@ usage() {
 Usage:
   clashon                        🚀 开启代理
   clashoff                       ⛔ 关闭代理
-  clashctl <command>
+  clash <command>
 
 🚀 Main Path:
   add                            ➕ 添加订阅
@@ -71,20 +71,20 @@ Usage:
   completion                     💡 导出 Bash / Zsh 补全脚本
 
 📌 Advanced Examples:
-  clashctl sub update
-  clashctl sub list
-  clashctl sub enable hk
-  clashctl sub disable hk
-  clashctl sub rename hk hk-bak
-  clashctl sub remove hk
+  clash sub update
+  clash sub list
+  clash sub enable hk
+  clash sub disable hk
+  clash sub rename hk hk-bak
+  clash sub remove hk
 
-  clashctl relay add 多跳-示例 节点A 节点B --domain example.com
-  clashctl relay list
+  clash relay add 多跳-示例 节点A 节点B --domain example.com
+  clash relay list
 
 💡 Notes:
   当前编译链固定为 active-only
   只处理当前 active 主订阅
-  Tun 模式属于高级能力，开启前建议先执行：clashctl tun doctor
+  Tun 模式属于高级能力，开启前建议先执行：clash tun doctor
 
 EOF
 }
@@ -98,7 +98,7 @@ prepare() {
 ensure_add_use_prerequisites() {
   if [ ! -x "$(yq_bin)" ]; then
     die_state "依赖未就绪：缺少 yq（$(yq_bin)）" \
-              "请先执行 bash install.sh，或运行 clashctl doctor 查看缺失项"
+              "请先执行 bash install.sh，或运行 clash doctor 查看缺失项"
   fi
 
   if [ ! -d "$RUNTIME_DIR" ]; then
@@ -174,7 +174,7 @@ ensure_on_path_ready() {
   load_system_state
 
   if [ "$SUBSCRIPTION_STATE" = "missing" ]; then
-    die_state "当前没有可用订阅" "clashctl add <订阅链接>"
+    die_state "当前没有可用订阅" "clash add <订阅链接>"
   fi
 
   if [ ! -s "$RUNTIME_DIR/config.yaml" ]; then
@@ -184,7 +184,7 @@ ensure_on_path_ready() {
   fi
 
   if [ ! -s "$RUNTIME_DIR/config.yaml" ] && [ ! -s "$RUNTIME_DIR/config.last.yaml" ]; then
-    die_state "当前没有可启动的运行配置" "clashctl doctor"
+    die_state "当前没有可启动的运行配置" "clash doctor"
   fi
 
   ensure_runtime_ports_ready
@@ -202,7 +202,7 @@ cmd_on() {
   local service_action=""
   local system_proxy_rc system_proxy_degraded="false"
 
-  trap 'rc=$?; ui_error "开启代理失败：cmd_on 在第 ${LINENO} 行执行失败：${BASH_COMMAND}（返回码：${rc}）"; ui_next "clashctl logs service"; exit "$rc"' ERR
+  trap 'rc=$?; ui_error "开启代理失败：cmd_on 在第 ${LINENO} 行执行失败：${BASH_COMMAND}（返回码：${rc}）"; ui_next "clash logs service"; exit "$rc"' ERR
 
   prepare
 
@@ -230,22 +230,22 @@ cmd_on() {
   if status_is_running 2>/dev/null && ! proxy_controller_reachable 2>/dev/null; then
     ui_warn "检测到内核已运行但控制器不可访问，正在重启以加载当前配置"
     service_action="restart"
-    service_restart || die_state "控制器启动失败：内核重启未完成" "clashctl logs mihomo"
+    service_restart || die_state "控制器启动失败：内核重启未完成" "clash logs mihomo"
   else
     service_action="start"
-    service_start || die_state "控制器启动失败：内核启动未完成" "clashctl logs mihomo"
+    service_start || die_state "控制器启动失败：内核启动未完成" "clash logs mihomo"
   fi
 
   if ! wait_runtime_controller_ready 8; then
     if [ "$service_action" = "restart" ] && [ "$(runtime_backend 2>/dev/null || true)" = "script" ]; then
-      status_is_running 2>/dev/null || die_state "控制器启动失败：内核未运行" "clashctl logs mihomo"
-      ui_warn "控制器暂不可访问，继续开启本地代理；请稍后执行 clashctl doctor"
+      status_is_running 2>/dev/null || die_state "控制器启动失败：内核未运行" "clash logs mihomo"
+      ui_warn "控制器暂不可访问，继续开启本地代理；请稍后执行 clash doctor"
     else
       ui_warn "控制器未在预期时间内可访问，正在重启内核重试"
-      service_restart || die_state "控制器启动失败：内核重启未完成" "clashctl logs mihomo"
+      service_restart || die_state "控制器启动失败：内核重启未完成" "clash logs mihomo"
       if ! wait_runtime_controller_ready 8; then
-        status_is_running 2>/dev/null || die_state "控制器启动失败：内核未运行" "clashctl logs mihomo"
-        ui_warn "控制器暂不可访问，继续开启本地代理；请稍后执行 clashctl doctor"
+        status_is_running 2>/dev/null || die_state "控制器启动失败：内核未运行" "clash logs mihomo"
+        ui_warn "控制器暂不可访问，继续开启本地代理；请稍后执行 clash doctor"
       fi
     fi
   fi
@@ -279,7 +279,7 @@ cmd_on() {
       ui_next "开机代理保持不可用；如需持久接管，请使用可写的 $(system_proxy_env_file)"
     else
       ui_warn "系统代理持久接管写入失败，仅当前 Shell 生效"
-      ui_next "clashctl doctor"
+      ui_next "clash doctor"
     fi
   fi
 
@@ -288,9 +288,9 @@ cmd_on() {
 
   if [ "${CLASH_ALIAS_CALL:-0}" != "1" ]; then
     if [ "$system_proxy_degraded" = "true" ]; then
-      ui_warn "当前通过 clashctl 子进程执行，不能修改当前 Shell 代理变量"
+      ui_warn "当前通过 clash 子进程执行，不能修改当前 Shell 代理变量"
     else
-      ui_warn "当前通过 clashctl 子进程执行，已开启系统代理，但不会修改当前终端的 Shell 变量"
+      ui_warn "当前通过 clash 子进程执行，已开启系统代理，但不会修改当前终端的 Shell 变量"
     fi
     ui_next "当前终端如需立即生效：重新打开终端后使用 clashon，或手动 source shell 入口"
     ui_blank
@@ -298,7 +298,7 @@ cmd_on() {
 
   if [ "$RUNTIME_STATE" = "degraded" ]; then
     ui_warn "代理内核已启动，但控制器暂不可访问"
-    ui_next "clashctl doctor"
+    ui_next "clash doctor"
     ui_blank
   fi
 
@@ -326,7 +326,7 @@ cmd_off() {
         ui_warn "当前环境不支持清理系统代理持久块，已继续关闭运行时"
       else
         ui_warn "系统代理持久块清理失败，已继续关闭运行时"
-        ui_next "clashctl doctor"
+        ui_next "clash doctor"
       fi
     fi
   fi
@@ -335,16 +335,16 @@ cmd_off() {
     stop_rc=0
     service_stop || stop_rc=$?
     if [ "$stop_rc" -ne 0 ]; then
-      die_state "关闭运行时失败：运行后端 stop 返回 ${stop_rc}" "clashctl logs"
+      die_state "关闭运行时失败：运行后端 stop 返回 ${stop_rc}" "clash logs"
     fi
 
     if ! wait_runtime_stopped 8; then
-      die_state "关闭运行时失败：代理内核仍在运行" "clashctl logs"
+      die_state "关闭运行时失败：代理内核仍在运行" "clash logs"
     fi
   fi
 
   if [ "$system_proxy_cleanup_blocked" = "true" ]; then
-    die_state "系统代理持久块未清理：$(system_proxy_env_file)" "请使用有权限的用户执行 clashctl off，或手动清理该文件中的 clash-for-linux 代理块"
+    die_state "系统代理持久块未清理：$(system_proxy_env_file)" "请使用有权限的用户执行 clash off，或手动清理该文件中的 clash-for-linux 代理块"
   fi
 
   ui_blank
@@ -418,7 +418,7 @@ cmd_ui() {
 
   controller_raw="$(status_read_controller_raw 2>/dev/null || true)"
   controller_addr="$(display_controller_local_addr "$controller_raw" 2>/dev/null || echo "$controller_raw")"
-  [ -n "${controller_addr:-}" ] && [ "$controller_addr" != "null" ] || die_state "未解析到控制器地址" "clashctl doctor"
+  [ -n "${controller_addr:-}" ] && [ "$controller_addr" != "null" ] || die_state "未解析到控制器地址" "clash doctor"
 
   controller_port="${controller_raw##*:}"
   internal_url="$(ui_internal_url "$controller_raw" 2>/dev/null || true)"
@@ -462,7 +462,7 @@ cmd_ui() {
       ;;
     不可访问)
       ui_warn "控制器当前不可访问"
-      ui_next "clashctl doctor"
+      ui_next "clash doctor"
       ui_blank
       return 1
       ;;
@@ -474,7 +474,7 @@ cmd_ui() {
       ;;
     *)
       ui_warn "控制器状态未知"
-      ui_next "clashctl doctor"
+      ui_next "clash doctor"
       ui_blank
       return 1
       ;;
@@ -834,11 +834,11 @@ EOF
 
   case "$kind" in
     bind_denied)
-      mixed_port_bind_recommendation_emit "$style" "$n" "当前 ${env_text} 对端口 ${port:-unknown} 的可绑定性受限；优先修改 .env 中 MIXED_PORT 后执行 clashctl config regen"
+      mixed_port_bind_recommendation_emit "$style" "$n" "当前 ${env_text} 对端口 ${port:-unknown} 的可绑定性受限；优先修改 .env 中 MIXED_PORT 后执行 clash config regen"
       n=$((n + 1))
       ;;
     address_in_use)
-      mixed_port_bind_recommendation_emit "$style" "$n" "mixed-port ${port:-unknown} 存在端口冲突；先检查占用进程，或修改 .env 中 MIXED_PORT 后执行 clashctl config regen"
+      mixed_port_bind_recommendation_emit "$style" "$n" "mixed-port ${port:-unknown} 存在端口冲突；先检查占用进程，或修改 .env 中 MIXED_PORT 后执行 clash config regen"
       n=$((n + 1))
       ;;
     *)
@@ -847,7 +847,7 @@ EOF
       ;;
   esac
 
-  mixed_port_bind_recommendation_emit "$style" "$n" "保留日志线索：clashctl logs mihomo"
+  mixed_port_bind_recommendation_emit "$style" "$n" "保留日志线索：clash logs mihomo"
 }
 
 mixed_port_bind_next_action() {
@@ -858,13 +858,13 @@ mixed_port_bind_next_action() {
 
   case "$kind" in
     bind_denied)
-      echo "修改 .env 中 MIXED_PORT 后执行 clashctl config regen"
+      echo "修改 .env 中 MIXED_PORT 后执行 clash config regen"
       ;;
     address_in_use)
-      echo "检查 ${port:-mixed-port} 占用，或修改 .env 中 MIXED_PORT 后执行 clashctl config regen"
+      echo "检查 ${port:-mixed-port} 占用，或修改 .env 中 MIXED_PORT 后执行 clash config regen"
       ;;
     bind_failed)
-      echo "clashctl logs mihomo"
+      echo "clash logs mihomo"
       ;;
     *)
       return 1
@@ -1043,40 +1043,40 @@ system_state_default_action() {
   case "$SYSTEM_STATE" in
     stopped)
       if [ "${BIND_FAILURE_STATE:-none}" != "none" ]; then
-        mixed_port_bind_next_action 2>/dev/null || echo "clashctl logs mihomo"
+        mixed_port_bind_next_action 2>/dev/null || echo "clash logs mihomo"
         return 0
       fi
 
       if [ "$SUBSCRIPTION_STATE" = "missing" ]; then
-        echo "clashctl add <订阅链接>"
+        echo "clash add <订阅链接>"
       else
         echo "clashon"
       fi
       ;;
     broken)
       if [ "${BIND_FAILURE_STATE:-none}" != "none" ]; then
-        mixed_port_bind_next_action 2>/dev/null || echo "clashctl logs mihomo"
+        mixed_port_bind_next_action 2>/dev/null || echo "clash logs mihomo"
         return 0
       fi
 
       if [ "$SUBSCRIPTION_STATE" = "missing" ]; then
-        echo "clashctl add <订阅链接>"
+        echo "clash add <订阅链接>"
       else
-        echo "clashctl doctor"
+        echo "clash doctor"
       fi
       ;;
     degraded)
       if [ "$RUNTIME_STATE" = "degraded" ]; then
-        echo "clashctl doctor"
+        echo "clash doctor"
       else
-        echo "clashctl status --verbose"
+        echo "clash status --verbose"
       fi
       ;;
     ready)
-      echo "clashctl select"
+      echo "clash select"
       ;;
     *)
-      echo "clashctl status --verbose"
+      echo "clash status --verbose"
       ;;
   esac
 }
@@ -1125,31 +1125,31 @@ system_state_recommendation_lines() {
 
   case "$SYSTEM_STATE" in
     ready)
-      echo "1. clashctl select"
-      echo "2. clashctl ls"
+      echo "1. clash select"
+      echo "2. clash ls"
       ;;
     stopped)
       if [ "$SUBSCRIPTION_STATE" = "missing" ]; then
-        echo "1. clashctl add <订阅链接>"
+        echo "1. clash add <订阅链接>"
       else
         echo "1. clashon"
-        echo "2. clashctl status"
+        echo "2. clash status"
       fi
       ;;
     degraded)
-      echo "1. clashctl doctor"
-      echo "2. clashctl status --verbose"
+      echo "1. clash doctor"
+      echo "2. clash status --verbose"
       ;;
     broken)
       if [ "$SUBSCRIPTION_STATE" = "missing" ]; then
-        echo "1. clashctl add <订阅链接>"
+        echo "1. clash add <订阅链接>"
       else
-        echo "1. clashctl doctor"
-        echo "2. clashctl ls"
+        echo "1. clash doctor"
+        echo "2. clash ls"
       fi
       ;;
     *)
-      echo "1. clashctl status --verbose"
+      echo "1. clash status --verbose"
       ;;
   esac
 }
@@ -1340,7 +1340,7 @@ print_config_apply_feedback() {
   build_status="$(status_build_effective_status 2>/dev/null || true)"
   build_applied="$(status_runtime_build_applied 2>/dev/null || true)"
   config_source="$(status_runtime_config_source 2>/dev/null || true)"
-  next_action="$(system_state_default_action 2>/dev/null || echo 'clashctl status')"
+  next_action="$(system_state_default_action 2>/dev/null || echo 'clash status')"
 
   echo
   echo "🧩 配置变更已处理"
@@ -1418,7 +1418,7 @@ print_add_feedback() {
 
   echo "✔ 已添加订阅并设为当前主订阅：$name"
   [ -n "${url:-}" ] && echo "📡 URL：$url"
-  echo "📋 最新订阅列表（clashctl ls）："
+  echo "📋 最新订阅列表（clash ls）："
 }
 
 print_use_context() {
@@ -1465,7 +1465,7 @@ print_use_feedback() {
 
   main_feedback_build_mode
   main_feedback_runtime_state
-  ui_next "clashctl select  选择节点"
+  ui_next "clash select  选择节点"
   ui_blank
 }
 
@@ -1481,14 +1481,14 @@ print_select_context() {
 
   if ! proxy_controller_reachable 2>/dev/null; then
     ui_kv "❗" "当前节点" "控制器不可访问"
-    ui_next "clashctl doctor"
+    ui_next "clash doctor"
     ui_blank
     return 1
   fi
 
   if [ "$(proxy_group_count 2>/dev/null || echo 0)" -le 0 ]; then
     ui_kv "❗" "当前节点" "暂无可切换策略组"
-    ui_next "clashctl status --verbose"
+    ui_next "clash status --verbose"
     ui_blank
     return 1
   fi
@@ -1522,19 +1522,19 @@ print_select_feedback() {
   fi
 
   main_feedback_runtime_state
-  ui_next "clashctl status"
+  ui_next "clash status"
   ui_blank
 }
 
 select_usage() {
   cat <<'EOF'
 Usage:
-  clashctl select
-  clashctl select <策略组> <节点>
+  clash select
+  clash select <策略组> <节点>
 
 Examples:
-  clashctl select
-  clashctl select "🚀 节点选择" "日本 01"
+  clash select
+  clash select "🚀 节点选择" "日本 01"
 
 Notes:
   不带参数时进入交互选择。
@@ -1545,13 +1545,13 @@ EOF
 mode_usage() {
   cat <<'EOF'
 Usage:
-  clashctl mode
-  clashctl mode status
-  clashctl mode rule|global|direct
+  clash mode
+  clash mode status
+  clash mode rule|global|direct
 
 Examples:
-  clashctl mode global
-  clashctl mode rule
+  clash mode global
+  clash mode rule
 
 Notes:
   global 模式使用 GLOBAL 策略组当前选择的策略组或节点。
@@ -1579,14 +1579,14 @@ cmd_mode() {
       ;;
   esac
 
-  [ "$#" -le 1 ] || die_usage "mode 参数不合法" "clashctl mode [status|rule|global|direct]"
+  [ "$#" -le 1 ] || die_usage "mode 参数不合法" "clash mode [status|rule|global|direct]"
 
   action="$(printf '%s' "$action" | tr '[:upper:]' '[:lower:]')"
   case "$action" in
     status|rule|global|direct)
       ;;
     *)
-      die_usage "未知路由模式：$action" "clashctl mode [status|rule|global|direct]"
+      die_usage "未知路由模式：$action" "clash mode [status|rule|global|direct]"
       ;;
   esac
 
@@ -1597,7 +1597,7 @@ cmd_mode() {
   fi
 
   if ! proxy_controller_reachable 2>/dev/null; then
-    die_state "控制器不可访问" "clashctl doctor"
+    die_state "控制器不可访问" "clash doctor"
   fi
 
   if [ "$action" != "status" ]; then
@@ -1625,11 +1625,11 @@ cmd_mode() {
     if [ -n "${global_current:-}" ]; then
       ui_kv "🚀" "GLOBAL 当前选择" "$global_current"
     else
-      ui_warn "未读取到 GLOBAL 当前选择，请执行 clashctl select 检查"
+      ui_warn "未读取到 GLOBAL 当前选择，请执行 clash select 检查"
     fi
-    ui_next "clashctl select \"GLOBAL\" \"<策略组或节点>\""
+    ui_next "clash select \"GLOBAL\" \"<策略组或节点>\""
   else
-    ui_next "clashctl status"
+    ui_next "clash status"
   fi
   ui_blank
 }
@@ -1637,13 +1637,13 @@ cmd_mode() {
 test_usage() {
   cat <<'EOF'
 Usage:
-  clashctl test
-  clashctl test <策略组>
+  clash test
+  clash test <策略组>
   clashtest [策略组]
 
 Examples:
-  clashctl test
-  clashctl test "节点选择"
+  clash test
+  clash test "节点选择"
 
 Notes:
   默认测试当前路由模式对应的策略组当前选择。
@@ -1682,7 +1682,7 @@ cmd_test() {
       ;;
   esac
 
-  [ "$#" -le 1 ] || die_usage "test 参数不合法" "clashctl test [策略组]"
+  [ "$#" -le 1 ] || die_usage "test 参数不合法" "clash test [策略组]"
 
   prepare
 
@@ -1691,7 +1691,7 @@ cmd_test() {
   fi
 
   if ! proxy_controller_reachable 2>/dev/null; then
-    die_state "控制器不可访问" "clashctl doctor"
+    die_state "控制器不可访问" "clash doctor"
   fi
 
   mode="$(proxy_mode_current 2>/dev/null || true)"
@@ -1736,7 +1736,7 @@ cmd_test() {
 
   if [ "$failed" -gt 0 ]; then
     ui_warn "${failed} 个目标不可访问"
-    ui_next "clashctl select"
+    ui_next "clash select"
     ui_blank
     return 1
   fi
@@ -1757,7 +1757,7 @@ print_sub_enable_feedback() {
   ui_kv "❤️" "当前健康" "$health / fail=$fail_count"
   main_feedback_build_mode
   main_feedback_runtime_state
-  ui_next "clashctl health ${name}"
+  ui_next "clash health ${name}"
   ui_blank
 }
 
@@ -1772,10 +1772,10 @@ print_sub_disable_feedback() {
 
   if [ "$name" = "$active" ]; then
     ui_kv "🚨" "当前主订阅" "已被禁用"
-    ui_next "clashctl use"
+    ui_next "clash use"
   else
     ui_kv "🧩" "当前主订阅" "${active:-未设置}"
-    ui_next "clashctl status"
+    ui_next "clash status"
   fi
 
   main_feedback_build_mode
@@ -1792,7 +1792,7 @@ print_sub_rename_feedback() {
   ui_kv "📡" "新名称" "$new_name"
   main_feedback_build_mode
   main_feedback_runtime_state
-  ui_next "clashctl ls"
+  ui_next "clash ls"
   ui_blank
 }
 
@@ -1807,7 +1807,7 @@ print_sub_remove_feedback() {
   ui_kv "🚩" "当前主订阅" "${active:-未设置}"
   main_feedback_build_mode
   main_feedback_runtime_state
-  ui_next "clashctl ls"
+  ui_next "clash ls"
   ui_blank
 }
 
@@ -1817,7 +1817,7 @@ print_config_kernel_feedback() {
   ui_title "🚀 运行内核已切换"
   ui_kv "🚀" "当前内核" "$kernel"
   main_feedback_runtime_state
-  ui_next "clashctl status"
+  ui_next "clash status"
   ui_blank
 }
 
@@ -1906,7 +1906,7 @@ print_tun_container_gate_feedback() {
       ui_kv "❗" "容器裁决" "高风险，已阻断开启"
       [ -n "${reason:-}" ] && ui_kv "❗" "阻断原因" "$reason"
       tun_container_runtime_hint_lines | sed 's/^/  /' || true
-      ui_next "查看完整诊断：clashctl tun doctor"
+      ui_next "查看完整诊断：clash tun doctor"
       ui_blank
       ;;
     *)
@@ -1917,11 +1917,11 @@ print_tun_container_gate_feedback() {
 
   if ! tun_kernel_is_recommended 2>/dev/null; then
     ui_warn "$(tun_kernel_support_reason 2>/dev/null || echo '当前内核不适合作为 Tun 主支持内核')"
-    ui_next "如需最稳妥 Tun 体验，先执行：clashctl config kernel mihomo"
+    ui_next "如需最稳妥 Tun 体验，先执行：clash config kernel mihomo"
   fi
 
   if [ "$mode" != "container-risky" ]; then
-    ui_next "clashctl tun doctor"
+    ui_next "clash tun doctor"
     ui_blank
   fi
 }
@@ -1971,7 +1971,7 @@ print_tun_on_feedback() {
   ui_kv "$status_icon" "当前状态" "$status_text"
   echo "💡 $detail"
 
-  ui_next "查看完整证据：clashctl tun doctor"
+  ui_next "查看完整证据：clash tun doctor"
   ui_blank
 }
 
@@ -1995,7 +1995,7 @@ print_tun_off_feedback() {
       ;;
   esac
 
-  ui_next "clashctl tun doctor"
+  ui_next "clash tun doctor"
   ui_blank
 }
 
@@ -2349,25 +2349,25 @@ connectivity_issue_text() {
 connectivity_next_action() {
   case "$(connectivity_issue_code)" in
     ok|local_proxy_ready_system_proxy_on)
-      echo "clashctl select"
+      echo "clash select"
       ;;
     runtime_stopped)
       echo "clashon"
       ;;
     mixed_port_bind_denied|mixed_port_address_in_use|mixed_port_bind_failed)
-      mixed_port_bind_next_action 2>/dev/null || echo "clashctl logs mihomo"
+      mixed_port_bind_next_action 2>/dev/null || echo "clash logs mihomo"
       ;;
     controller_unreachable)
-      echo "clashctl doctor"
+      echo "clash doctor"
       ;;
     config_invalid)
-      echo "clashctl doctor"
+      echo "clash doctor"
       ;;
     subscription_unhealthy)
-      echo "clashctl ls"
+      echo "clash ls"
       ;;
     proxy_control_broken)
-      echo "clashctl status --verbose"
+      echo "clash status --verbose"
       ;;
     system_proxy_unsupported|local_proxy_ready_system_proxy_unsupported)
       echo "浏览器/应用手动设置代理，或在当前 Shell 使用 clashon"
@@ -2379,7 +2379,7 @@ connectivity_next_action() {
       echo "clashoff && clashon"
       ;;
     *)
-      echo "clashctl doctor"
+      echo "clash doctor"
       ;;
   esac
 }
@@ -2648,7 +2648,7 @@ print_status_summary_compact() {
   user_connectivity="$(connectivity_issue_text)"
   user_risk="$(status_user_risk_text)"
   current_proxy_brief="$(status_current_proxy_brief)"
-  next_action="$(connectivity_next_action 2>/dev/null || system_state_default_action 2>/dev/null || echo 'clashctl status --verbose')"
+  next_action="$(connectivity_next_action 2>/dev/null || system_state_default_action 2>/dev/null || echo 'clash status --verbose')"
   system_proxy_text="$(persistent_system_proxy_text 2>/dev/null || echo unknown)"
   if [ -f "$(runtime_dashboard_dir)/index.html" ]; then
     dashboard_text="已部署"
@@ -2681,8 +2681,8 @@ print_status_summary_compact() {
   echo "📡 当前订阅：${current_active:-未设置}"
   echo "🚀 当前节点：$current_proxy_brief"
   echo "🚨 当前风险：$user_risk"
-  if [ "$next_action" = "clashctl select" ]; then
-    echo "👉 clashctl select  切换节点"
+  if [ "$next_action" = "clash select" ]; then
+    echo "👉 clash select  切换节点"
   else
     echo "👉 下一步：$next_action"
   fi
@@ -2727,7 +2727,7 @@ print_status_summary_compact() {
 
   echo
   echo "🧩 安装验证：$(status_install_verify_brief)"
-  echo "💡 更多细节：clashctl status --verbose"
+  echo "💡 更多细节：clash status --verbose"
   echo
 }
 
@@ -2796,7 +2796,7 @@ print_status_summary_verbose() {
   user_connectivity="$(connectivity_issue_text)"
   user_risk="$(status_user_risk_text)"
   current_proxy_brief="$(status_current_proxy_brief)"
-  next_action="$(connectivity_next_action 2>/dev/null || system_state_default_action 2>/dev/null || echo 'clashctl status --verbose')"
+  next_action="$(connectivity_next_action 2>/dev/null || system_state_default_action 2>/dev/null || echo 'clash status --verbose')"
   install_backend_text="$(status_runtime_backend_text)"
   install_container_text="$(status_container_mode_text)"
   install_verify_text="$(status_install_verify_brief)"
@@ -2842,8 +2842,8 @@ print_status_summary_verbose() {
   echo "📡 当前订阅：${current_active:-未设置}"
   echo "🚀 当前节点：$current_proxy_brief"
   echo "🚨 当前风险：$user_risk"
-  if [ "$next_action" = "clashctl select" ]; then
-    echo "👉 clashctl select  切换节点"
+  if [ "$next_action" = "clash select" ]; then
+    echo "👉 clash select  切换节点"
   else
     echo "👉 下一步：$next_action"
   fi
@@ -3007,7 +3007,7 @@ cmd_status() {
       print_status_summary_compact
       ;;
     *)
-      die_usage "未知的 status 参数：$1" "clashctl status [--verbose]"
+      die_usage "未知的 status 参数：$1" "clash status [--verbose]"
       ;;
   esac
 }
@@ -3020,11 +3020,11 @@ cmd_status_next() {
 boot_usage() {
   cat <<EOF
 📜 用法：
-  clashctl boot status
-  clashctl boot on
-  clashctl boot off
-  clashctl boot runtime on|off|status
-  clashctl boot proxy on|off|status
+  clash boot status
+  clash boot on
+  clash boot off
+  clash boot runtime on|off|status
+  clash boot proxy on|off|status
 EOF
 }
 
@@ -3045,7 +3045,7 @@ cmd_boot_runtime() {
         die_state "当前后端不支持内核开机自启：$(runtime_backend 2>/dev/null || echo unknown)" \
                   "如需开机自启，请使用 systemd / systemd-user 后端"
       fi
-      service_autostart_enable || die_state "内核开机自启开启失败" "clashctl doctor"
+      service_autostart_enable || die_state "内核开机自启开启失败" "clash doctor"
       success "内核开机自启已开启"
       ;;
     off)
@@ -3054,7 +3054,7 @@ cmd_boot_runtime() {
         write_runtime_value "RUNTIME_BOOT_AUTOSTART_EXPLICIT" "true"
         ui_warn "当前后端不支持内核开机自启，已记录为关闭：$(runtime_backend 2>/dev/null || echo unknown)"
       else
-        service_autostart_disable || die_state "内核开机自启关闭失败" "clashctl doctor"
+        service_autostart_disable || die_state "内核开机自启关闭失败" "clash doctor"
         success "内核开机自启已关闭"
       fi
       ;;
@@ -3063,7 +3063,7 @@ cmd_boot_runtime() {
       return 0
       ;;
     *)
-      die_usage "未知的 boot runtime 参数：$1" "clashctl boot runtime on|off|status"
+      die_usage "未知的 boot runtime 参数：$1" "clash boot runtime on|off|status"
       ;;
   esac
 
@@ -3080,12 +3080,12 @@ cmd_boot_proxy() {
         ui_warn "script 后端不会开机启动内核；仅保持系统代理变量可能在重启后指向未运行的本地端口"
       fi
       boot_proxy_keep_enable || die_state "开机代理保持开启失败：当前环境不支持写入 $(system_proxy_env_file)" \
-                                      "请检查权限，或执行 clashctl doctor"
+                                      "请检查权限，或执行 clash doctor"
       success "开机代理保持已开启"
       ;;
     off)
       boot_proxy_keep_disable || die_state "开机代理保持关闭失败：无法清理 $(system_proxy_env_file)" \
-                                       "请检查权限，或执行 clashctl doctor"
+                                       "请检查权限，或执行 clash doctor"
       success "开机代理保持已关闭"
       ;;
     status)
@@ -3093,7 +3093,7 @@ cmd_boot_proxy() {
       return 0
       ;;
     *)
-      die_usage "未知的 boot proxy 参数：$1" "clashctl boot proxy on|off|status"
+      die_usage "未知的 boot proxy 参数：$1" "clash boot proxy on|off|status"
       ;;
   esac
 
@@ -3107,27 +3107,27 @@ cmd_boot() {
     on)
       if ! service_autostart_supported; then
         die_state "当前后端不支持开机自动进入代理状态：$(runtime_backend 2>/dev/null || echo unknown)" \
-                  "script 后端只能手动启动；可执行 clashctl boot proxy off 清理开机代理保持"
+                  "script 后端只能手动启动；可执行 clash boot proxy off 清理开机代理保持"
       fi
       boot_proxy_keep_enable || die_state "开机代理保持开启失败：当前环境不支持写入 $(system_proxy_env_file)" \
-                                      "请检查权限，或执行 clashctl doctor"
+                                      "请检查权限，或执行 clash doctor"
       if ! service_autostart_enable; then
         boot_proxy_keep_disable >/dev/null 2>&1 || true
-        die_state "内核开机自启开启失败" "clashctl doctor"
+        die_state "内核开机自启开启失败" "clash doctor"
       fi
       success "开机代理接管已开启"
       print_boot_status
       ;;
     off)
       if service_autostart_supported; then
-        service_autostart_disable || die_state "内核开机自启关闭失败" "clashctl doctor"
+        service_autostart_disable || die_state "内核开机自启关闭失败" "clash doctor"
       else
         write_runtime_value "RUNTIME_BOOT_AUTOSTART" "false"
         write_runtime_value "RUNTIME_BOOT_AUTOSTART_EXPLICIT" "true"
         ui_warn "当前后端不支持内核开机自启，跳过服务 disable：$(runtime_backend 2>/dev/null || echo unknown)"
       fi
       boot_proxy_keep_disable || die_state "开机代理保持关闭失败：无法清理 $(system_proxy_env_file)" \
-                                       "请检查权限，或执行 clashctl doctor"
+                                       "请检查权限，或执行 clash doctor"
       success "开机代理接管已关闭"
       print_boot_status
       ;;
@@ -3146,7 +3146,7 @@ cmd_boot() {
       boot_usage
       ;;
     *)
-      die_usage "未知的 boot 子命令：$1" "clashctl boot on|off|status"
+      die_usage "未知的 boot 子命令：$1" "clash boot on|off|status"
       ;;
   esac
 }
@@ -3277,30 +3277,30 @@ cmd_ui_help_summary() {
   echo "〽️ 常用命令"
   printf '  %-18s %s\n' "clashon" "🚀 开启代理"
   printf '  %-18s %s\n' "clashoff" "⛔ 关闭代理"
-  printf '  %-18s %s\n' "clashctl select" "💫 选择节点"
-  printf '  %-18s %s\n' "clashctl mode" "🧭 查看或切换路由模式"
+  printf '  %-18s %s\n' "clash select" "💫 选择节点"
+  printf '  %-18s %s\n' "clash mode" "🧭 查看或切换路由模式"
   printf '  %-18s %s\n' "clashtest" "🌐 测试当前节点连通性"
   echo "🕹️  控制台"
   printf '  %-18s %s\n' "clashui" "🕹️  查看 Web 控制台"
   printf '  %-18s %s\n' "clashsecret" "🔑 查看或设置 Web 密钥"
   echo "📦 订阅"
-  printf '  %-18s %s\n' "clashctl add" "➕ 添加订阅"
-  printf '  %-18s %s\n' "clashctl add local" "➕ 从 runtime/subscriptions 导入本地订阅"
-  printf '  %-18s %s\n' "clashctl use" "💱 切换订阅"
-  printf '  %-18s %s\n' "clashctl ls" "📜 查看订阅列表"
+  printf '  %-18s %s\n' "clash add" "➕ 添加订阅"
+  printf '  %-18s %s\n' "clash add local" "➕ 从 runtime/subscriptions 导入本地订阅"
+  printf '  %-18s %s\n' "clash use" "💱 切换订阅"
+  printf '  %-18s %s\n' "clash ls" "📜 查看订阅列表"
   echo "📌 高级"
-  printf '  %-18s %s\n' "clashctl lan" "🏠 局域网代理管理"
-  printf '  %-18s %s\n' "clashctl tun" "🧪 Tun 模式管理"
-  printf '  %-18s %s\n' "clashctl mixin" "🧩 Mixin 配置管理"
-  printf '  %-18s %s\n' "clashctl sub" "🧩 订阅高级管理（启用 / 禁用 / 重命名 / 删除）"
-  printf '  %-18s %s\n' "clashctl upgrade" "🚀 升级当前或指定内核"
-  printf '  %-18s %s\n' "clashctl update" "🔄 更新项目代码"
-  printf '  %-18s %s\n' "clashctl completion" "💡 导出 Bash / Zsh 补全脚本"
+  printf '  %-18s %s\n' "clash lan" "🏠 局域网代理管理"
+  printf '  %-18s %s\n' "clash tun" "🧪 Tun 模式管理"
+  printf '  %-18s %s\n' "clash mixin" "🧩 Mixin 配置管理"
+  printf '  %-18s %s\n' "clash sub" "🧩 订阅高级管理（启用 / 禁用 / 重命名 / 删除）"
+  printf '  %-18s %s\n' "clash upgrade" "🚀 升级当前或指定内核"
+  printf '  %-18s %s\n' "clash update" "🔄 更新项目代码"
+  printf '  %-18s %s\n' "clash completion" "💡 导出 Bash / Zsh 补全脚本"
   echo "📜 日志"
-  printf '  %-18s %s\n' "clashctl doctor" "🩺 诊断面板"
-  printf '  %-18s %s\n' "clashctl log/logs" "📜 查看日志"
+  printf '  %-18s %s\n' "clash doctor" "🩺 诊断面板"
+  printf '  %-18s %s\n' "clash log/logs" "📜 查看日志"
   echo
-  echo "💡 显示更多帮助命令：clashctl -h"
+  echo "💡 显示更多帮助命令：clash -h"
 }
 
 logs_mihomo() {
@@ -3358,7 +3358,7 @@ systemd_unit_has_stale_runtime_template() {
 
   [ -f "$unit_file" ] || return 1
 
-  grep -Eq '^[[:space:]]*Type=forking([[:space:]]|$)|^[[:space:]]*PIDFile=|clashctl[[:space:]]+start-direct' "$unit_file"
+  grep -Eq '^[[:space:]]*Type=forking([[:space:]]|$)|^[[:space:]]*PIDFile=|(clash|clashctl)[[:space:]]+start-direct' "$unit_file"
 }
 
 systemd_unit_stale_runtime_template_warning() {
@@ -3404,7 +3404,7 @@ cmd_logs() {
       logs_service
       ;;
     *)
-      die "用法：clashctl log|logs [mihomo|subconverter|service]"
+      die "用法：clash log|logs [mihomo|subconverter|service]"
       ;;
   esac
 }
@@ -3577,7 +3577,7 @@ doctor_tun_system_proxy() {
 
   if [ "$tun_state" = "true" ] && [ "$system_proxy_state" = "on" ]; then
     doctor_warn "Tun 模式与系统代理同时开启，可能造成流量接管路径重复或排障混淆"
-    echo "    建议：clashctl tun on-proxy-off"
+    echo "    建议：clash tun on-proxy-off"
   fi
 }
 
@@ -4095,10 +4095,16 @@ doctor_install_verify() {
   doctor_print_title "安装验证检查"
 
   case "$(install_verify_command_ready 2>/dev/null || true)" in
-    true) doctor_ok "clashctl 命令入口可用" ;;
-    false) doctor_fail "clashctl 命令入口不可用" ;;
+    true) doctor_ok "管理命令入口可用" ;;
+    false) doctor_fail "管理命令入口不可用" ;;
     *) doctor_warn "未记录命令入口验证结果" ;;
   esac
+
+  if clash_entry_is_managed; then
+    doctor_ok "clash 主命令入口可用"
+  else
+    doctor_warn "clash 主命令入口未由本项目接管（可能存在同名命令）"
+  fi
 
   case "$(install_verify_config_ready 2>/dev/null || true)" in
     true) doctor_ok "安装后配置已就绪" ;;
@@ -4255,14 +4261,14 @@ cmd_dev() {
       echo
       echo "🐱 开发重置完成"
       echo "🧩 保留内容：项目目录、已下载依赖、调试环境"
-      echo "👉 下一步：重新执行 install.sh 或 clashctl status"
+      echo "👉 下一步：重新执行 install.sh 或 clash status"
       echo
       ;;
     "")
-      echo "📜 用法：clashctl dev reset"
+      echo "📜 用法：clash dev reset"
       ;;
     *)
-      die_usage "未知的 dev 子命令：$1" "clashctl dev reset"
+      die_usage "未知的 dev 子命令：$1" "clash dev reset"
       ;;
   esac
 }
@@ -4285,7 +4291,7 @@ cmd_config_show() {
   ui_kv "🐱" "最近构建" "${build_status:-unknown}${build_time:+ @ ${build_time}}"
   ui_kv "🧩" "配置来源" "${config_source:-unknown}"
   ui_blank
-  ui_next "clashctl status"
+  ui_next "clash status"
   ui_blank
 }
 
@@ -4307,7 +4313,7 @@ cmd_config() {
       ;;
     kernel)
       shift || true
-      [ -n "${1:-}" ] || die_usage "内核类型不能为空" "clashctl config kernel <mihomo|clash>"
+      [ -n "${1:-}" ] || die_usage "内核类型不能为空" "clash config kernel <mihomo|clash>"
       write_runtime_kernel_type "$1"
       resolve_runtime_kernel
       regenerate_config
@@ -4318,20 +4324,20 @@ cmd_config() {
     "")
       ui_title "🧩 配置编译管理"
       echo "📜 用法："
-      echo "  clashctl config show"
-      echo "  clashctl config explain"
-      echo "  clashctl config regen"
-      echo "  clashctl config kernel <mihomo|clash>"
+      echo "  clash config show"
+      echo "  clash config explain"
+      echo "  clash config regen"
+      echo "  clash config kernel <mihomo|clash>"
       echo
       echo "🧩 说明："
       echo "  当前编译链固定为 active-only"
       echo "  只处理当前 active 主订阅"
       echo
-      ui_next "clashctl config show"
+      ui_next "clash config show"
       ui_blank
       ;;
     *)
-      die_usage "未知的 config 子命令：$1" "clashctl config"
+      die_usage "未知的 config 子命令：$1" "clash config"
       ;;
   esac
 }
@@ -4382,17 +4388,17 @@ cmd_lan() {
       ;;
     status)
       print_lan_status
-      ui_next "clashctl lan on"
+      ui_next "clash lan on"
       ui_blank
       ;;
     -h|--help|help|"")
       echo "📜 用法："
-      echo "  clashctl lan status"
-      echo "  clashctl lan on"
-      echo "  clashctl lan off"
+      echo "  clash lan status"
+      echo "  clash lan on"
+      echo "  clash lan off"
       ;;
     *)
-      die_usage "未知的 lan 子命令：$action" "clashctl lan on|off|status"
+      die_usage "未知的 lan 子命令：$action" "clash lan on|off|status"
       ;;
   esac
 }
@@ -4403,7 +4409,7 @@ print_profile_use_feedback() {
   ui_title "🔧 Profile 已切换"
   ui_kv "🔧" "当前 Profile" "$profile"
   main_feedback_runtime_state
-  ui_next "clashctl status"
+  ui_next "clash status"
   ui_blank
 }
 
@@ -4486,11 +4492,11 @@ cmd_mixin_show() {
   else
     cat "$file"
     if mixin_config_has_secret_override "$file"; then
-      ui_warn "检测到 override.secret：该字段已忽略，请改用 clashctl secret <密钥>"
+      ui_warn "检测到 override.secret：该字段已忽略，请改用 clash secret <密钥>"
     fi
   fi
   ui_blank
-  ui_next "clashctl mixin edit"
+  ui_next "clash mixin edit"
   ui_blank
 }
 
@@ -4586,7 +4592,7 @@ cmd_mixin_edit() {
     echo "🟡 Mixin 已写入（下次启动生效）"
   fi
 
-  echo "👉 下一步：clashctl mixin runtime"
+  echo "👉 下一步：clash mixin runtime"
   echo
 }
 
@@ -4603,7 +4609,7 @@ cmd_mixin_raw() {
   echo
   cat "$file"
   echo
-  echo "👉 下一步：clashctl mixin runtime"
+  echo "👉 下一步：clash mixin runtime"
   echo
 }
 
@@ -4622,7 +4628,7 @@ cmd_mixin_runtime() {
   echo
   cat "$file"
   echo
-  echo "👉 下一步：clashctl status"
+  echo "👉 下一步：clash status"
   echo
 }
 
@@ -4643,30 +4649,30 @@ cmd_mixin() {
     help|-h|--help)
       ui_title "🧩 Mixin 配置管理"
       echo "📜 用法："
-      echo "  clashctl mixin"
-      echo "  clashctl mixin edit"
-      echo "  clashctl mixin raw"
-      echo "  clashctl mixin runtime"
+      echo "  clash mixin"
+      echo "  clash mixin edit"
+      echo "  clash mixin raw"
+      echo "  clash mixin runtime"
       echo
       echo "🧩 说明："
       echo "  mixin 用于补充、覆盖或前后置合并原始订阅配置"
       echo "  runtime 展示当前内核真正加载的最终配置"
       echo
       echo "💡 常用动作："
-      echo "  clashctl mixin"
-      echo "  clashctl mixin edit"
-      echo "  clashctl mixin runtime"
+      echo "  clash mixin"
+      echo "  clash mixin edit"
+      echo "  clash mixin runtime"
       echo
       echo "⚡ 快捷参数："
-      echo "  clashctl mixin -e"
-      echo "  clashctl mixin -c"
-      echo "  clashctl mixin -r"
+      echo "  clash mixin -e"
+      echo "  clash mixin -c"
+      echo "  clash mixin -r"
       echo
-      ui_next "clashctl mixin"
+      ui_next "clash mixin"
       ui_blank
       ;;
     *)
-      die_usage "未知的 mixin 子命令：$1" "clashctl mixin"
+      die_usage "未知的 mixin 子命令：$1" "clash mixin"
       ;;
   esac
 }
@@ -4724,14 +4730,14 @@ cmd_relay_add() {
   [ -x "$(yq_bin)" ] || die_state "依赖未就绪：缺少 yq（$(yq_bin)）" "请先执行 bash install.sh"
 
   name="${1:-}"
-  [ -n "${name:-}" ] || die_usage "缺少多跳名称" "clashctl relay add <名称> <节点A> <节点B> [更多节点] [--domain 域名|--match]"
+  [ -n "${name:-}" ] || die_usage "缺少多跳名称" "clash relay add <名称> <节点A> <节点B> [更多节点] [--domain 域名|--match]"
   shift || true
 
   while [ $# -gt 0 ]; do
     case "$1" in
       --domain)
         shift || true
-        [ -n "${1:-}" ] || die_usage "--domain 缺少域名" "clashctl relay add <名称> <节点A> <节点B> --domain example.com"
+        [ -n "${1:-}" ] || die_usage "--domain 缺少域名" "clash relay add <名称> <节点A> <节点B> --domain example.com"
         domain="$1"
         ;;
       --match)
@@ -4746,7 +4752,7 @@ cmd_relay_add() {
         break
         ;;
       --*)
-        die_usage "未知 relay add 参数：$1" "clashctl relay add <名称> <节点A> <节点B> [--domain 域名|--match]"
+        die_usage "未知 relay add 参数：$1" "clash relay add <名称> <节点A> <节点B> [--domain 域名|--match]"
         ;;
       *)
         nodes+=("$1")
@@ -4755,10 +4761,10 @@ cmd_relay_add() {
     shift || true
   done
 
-  [ "${#nodes[@]}" -ge 2 ] || die_usage "多跳至少需要两个节点" "clashctl relay add <名称> <节点A> <节点B>"
+  [ "${#nodes[@]}" -ge 2 ] || die_usage "多跳至少需要两个节点" "clash relay add <名称> <节点A> <节点B>"
 
   if [ -n "${domain:-}" ] && [ "$match_mode" = "true" ]; then
-    die_usage "--domain 与 --match 只能选择一个" "clashctl relay add <名称> <节点A> <节点B> [--domain 域名|--match]"
+    die_usage "--domain 与 --match 只能选择一个" "clash relay add <名称> <节点A> <节点B> [--domain 域名|--match]"
   fi
 
   if [ -n "${domain:-}" ]; then
@@ -4793,7 +4799,7 @@ cmd_relay_add() {
   [ -n "${rule:-}" ] && ui_kv "📜" "新增规则" "$rule"
 
   relay_apply_mixin_change
-  echo "👉 下一步：clashctl relay list"
+  echo "👉 下一步：clash relay list"
   echo
 }
 
@@ -4817,7 +4823,7 @@ cmd_relay_list() {
     printf '%s\n' "$output"
   else
     echo "当前没有通过 mixin 配置的多跳组"
-    ui_next "clashctl relay add 多跳-示例 节点A 节点B --domain example.com"
+    ui_next "clash relay add 多跳-示例 节点A 节点B --domain example.com"
   fi
   ui_blank
 }
@@ -4828,7 +4834,7 @@ cmd_relay_remove() {
   [ -x "$(yq_bin)" ] || die_state "依赖未就绪：缺少 yq（$(yq_bin)）" "请先执行 bash install.sh"
 
   name="${1:-}"
-  [ -n "${name:-}" ] || die_usage "缺少多跳名称" "clashctl relay remove <名称>"
+  [ -n "${name:-}" ] || die_usage "缺少多跳名称" "clash relay remove <名称>"
 
   file="$(ensure_relay_mixin_file)"
   RELAY_NAME="$name" "$(yq_bin)" eval -i '
@@ -4842,7 +4848,7 @@ cmd_relay_remove() {
   ui_kv "🔗" "多跳名称" "$name"
 
   relay_apply_mixin_change
-  echo "👉 下一步：clashctl relay list"
+  echo "👉 下一步：clash relay list"
   echo
 }
 
@@ -4862,13 +4868,13 @@ cmd_relay() {
     help|-h|--help)
       ui_title "🔗 多跳节点管理"
       echo "📜 用法："
-      echo "  clashctl relay add <名称> <节点A> <节点B> [更多节点] [--domain 域名|--match]"
-      echo "  clashctl relay list"
-      echo "  clashctl relay remove <名称>"
+      echo "  clash relay add <名称> <节点A> <节点B> [更多节点] [--domain 域名|--match]"
+      echo "  clash relay list"
+      echo "  clash relay remove <名称>"
       echo
       echo "示例："
-      echo "  clashctl relay add 多跳-示例 节点A 节点B --domain example.com"
-      echo "  clashctl relay add 全局多跳 节点A 节点B --match"
+      echo "  clash relay add 多跳-示例 节点A 节点B --domain example.com"
+      echo "  clash relay add 全局多跳 节点A 节点B --match"
       echo
       echo "说明："
       echo "  add 会写入 runtime/mixin.yaml（兼容读取 config/mixin.yaml），并重新生成运行配置"
@@ -4876,7 +4882,7 @@ cmd_relay() {
       echo "  节点名称必须与订阅生成的节点名完全一致"
       ;;
     *)
-      die_usage "未知的 relay 子命令：$1" "clashctl relay help"
+      die_usage "未知的 relay 子命令：$1" "clash relay help"
       ;;
   esac
 }
@@ -5010,9 +5016,9 @@ doctor_recommendation_lines() {
 
   if ! runtime_config_exists; then
     if [ -n "$(subscription_url 2>/dev/null || true)" ]; then
-      echo "💡 clashctl config regen"
+      echo "💡 clash config regen"
     else
-      echo "💡 clashctl add <订阅链接>"
+      echo "💡 clash add <订阅链接>"
     fi
     return 0
   fi
@@ -5026,27 +5032,27 @@ doctor_recommendation_lines() {
   fi
 
   if ! proxy_controller_reachable 2>/dev/null; then
-    echo "💡 clashctl logs service"
-    echo "💡 clashctl off && clashon"
+    echo "💡 clash logs service"
+    echo "💡 clash off && clashon"
     return 0
   fi
 
   if [ -n "${active_sub:-}" ] && ! active_subscription_enabled 2>/dev/null; then
-    echo "💡 clashctl use"
-    echo "💡 clashctl ls"
+    echo "💡 clash use"
+    echo "💡 clash ls"
     return 0
   fi
 
   if [ "$(status_build_last_status 2>/dev/null || true)" = "failed" ]; then
-    echo "💡 clashctl config regen"
-    echo "💡 clashctl doctor"
+    echo "💡 clash config regen"
+    echo "💡 clash doctor"
     return 0
   fi
 
   if [ "$(tun_enabled 2>/dev/null || echo false)" = "true" ] \
     && [ "$(system_proxy_status 2>/dev/null || echo off)" = "on" ]; then
-    echo "💡 clashctl tun on-proxy-off"
-    echo "💡 如需恢复普通系统代理模式：clashctl tun off-proxy-on"
+    echo "💡 clash tun on-proxy-off"
+    echo "💡 如需恢复普通系统代理模式：clash tun off-proxy-on"
     return 0
   fi
 
@@ -5061,8 +5067,8 @@ doctor_recommendation_lines() {
       echo "💡 clashoff && clashon"
       ;;
     *)
-      echo "💡 clashctl status"
-      echo "💡 clashctl select"
+      echo "💡 clash status"
+      echo "💡 clash select"
       ;;
   esac
 }
@@ -5200,7 +5206,7 @@ print_controller_secret_apply_feedback() {
       ui_kv "🐱" "状态" "将在下次启动时生效"
     fi
   else
-    ui_warn "运行时配置暂未同步：缺少 yq 或写入失败，请稍后执行 clashctl config regen"
+    ui_warn "运行时配置暂未同步：缺少 yq 或写入失败，请稍后执行 clash config regen"
     ui_kv "🐱" "状态" "密钥已写入 .env，运行时配置同步后生效"
   fi
 
@@ -5218,7 +5224,7 @@ cmd_secret() {
     return 0
   fi
 
-  [ "$#" -eq 1 ] || die_usage "secret 参数不合法" "clashctl secret <密钥>"
+  [ "$#" -eq 1 ] || die_usage "secret 参数不合法" "clash secret <密钥>"
 
   new_secret="$1"
   set_controller_secret "$new_secret"
@@ -5263,9 +5269,9 @@ cmd_tun_status() {
   fi
 
   if [ "$enabled" = "true" ]; then
-    echo "👉 下一步：clashctl tun doctor"
+    echo "👉 下一步：clash tun doctor"
   else
-    echo "👉 下一步：clashctl tun on"
+    echo "👉 下一步：clash tun on"
   fi
   echo
 }
@@ -5315,7 +5321,7 @@ cmd_tun_on() {
       echo "❗ Tun 模式无法开启"
       echo "🚨 原因：当前环境不满足基础 Tun 条件"
       echo "💡 若已通过 setcap 授权 mihomo，请确认 getcap 已安装并重试"
-      echo "👉 下一步：clashctl tun doctor"
+      echo "👉 下一步：clash tun doctor"
       echo
       return 1
     fi
@@ -5409,7 +5415,7 @@ cmd_tun_on_proxy_off() {
   else
     ui_warn "系统代理持久块清理失败，Tun 已按前序结果处理"
   fi
-  ui_next "clashctl doctor"
+  ui_next "clash doctor"
   ui_blank
   return "$system_proxy_rc"
 }
@@ -5433,7 +5439,7 @@ cmd_tun_off_proxy_on() {
   else
     ui_warn "系统代理持久接管写入失败，Tun 已按前序结果处理"
   fi
-  ui_next "clashctl doctor"
+  ui_next "clash doctor"
   ui_blank
   return "$system_proxy_rc"
 }
@@ -5594,7 +5600,7 @@ doctor_tun_checks() {
     if [ "${runtime_tun_auto_redirect:-false}" != "true" ] \
       && [ "$env_type" = "host" ] \
       && [ "$(runtime_kernel_type 2>/dev/null || echo mihomo)" = "mihomo" ]; then
-      echo "  💡 auto-redirect 建议：裸 TCP 透明接管超时时，设置 CLASH_TUN_AUTO_REDIRECT=true 后重新执行 clashctl tun on"
+      echo "  💡 auto-redirect 建议：裸 TCP 透明接管超时时，设置 CLASH_TUN_AUTO_REDIRECT=true 后重新执行 clash tun on"
     fi
   else
     echo "  🚨 运行时配置：不存在"
@@ -6274,7 +6280,7 @@ tun_doctor_action_lines() {
             ;;
           script)
             echo "👉 当前运行后端为 script；请确认启动 mihomo 的实际进程具备 CAP_NET_ADMIN / CAP_NET_RAW"
-            echo "👉 若当前就是主机脚本模式，可尝试提升权限后重新执行：sudo clashctl tun on"
+            echo "👉 若当前就是主机脚本模式，可尝试提升权限后重新执行：sudo clash tun on"
             ;;
           *)
             echo "👉 请结合运行后端、容器环境和进程能力证据，确认 mihomo 实际拥有 CAP_NET_ADMIN / CAP_NET_RAW"
@@ -6311,13 +6317,13 @@ tun_doctor_action_lines() {
       echo "👉 请先启动代理：clashon"
       ;;
     controller-unreachable)
-      echo "👉 请先修复控制器可访问性：clashctl doctor"
+      echo "👉 请先修复控制器可访问性：clash doctor"
       ;;
     disabled-in-state|disabled-in-runtime-config)
-      echo "👉 请重新同步 Tun 配置：clashctl tun off && clashctl tun on"
+      echo "👉 请重新同步 Tun 配置：clash tun off && clash tun on"
       ;;
     tun-disabled)
-      echo "👉 请开启 Tun：clashctl tun on"
+      echo "👉 请开启 Tun：clash tun on"
       ;;
     host-ip-unavailable|current-ip-unavailable)
       echo "👉 请先确认服务器可访问 https://ip.sb：curl https://ip.sb"
@@ -6326,7 +6332,7 @@ tun_doctor_action_lines() {
       if tun_log_has_tun_traffic_evidence 2>/dev/null; then
         echo "👉 已看到 Tun 流量证据，但公网出口验证仍未通过；请结合 ip rule、ip route show table all 和内核日志判断是否为策略路由/部分生效"
       else
-        echo "👉 当前流量仍走本机出口，请检查 Tun 路由规则和内核日志：clashctl logs"
+        echo "👉 当前流量仍走本机出口，请检查 Tun 路由规则和内核日志：clash logs"
       fi
       ;;
     default-route-not-tun|main-route-unchanged-needs-policy-check)
@@ -6334,13 +6340,13 @@ tun_doctor_action_lines() {
       ;;
     policy-routing-likely-effective)
       if tun_log_tun_source_line >/dev/null 2>&1; then
-        echo "👉 已看到 Tun policy routing 与 Tun 源地址流量；如仍有访问异常，请重点检查分流规则和内核日志：clashctl logs"
+        echo "👉 已看到 Tun policy routing 与 Tun 源地址流量；如仍有访问异常，请重点检查分流规则和内核日志：clash logs"
       else
-        echo "👉 Tun policy routing 已安装；主动流量验证不足，建议发起一次直连外网访问后重新执行：clashctl tun doctor"
+        echo "👉 Tun policy routing 已安装；主动流量验证不足，建议发起一次直连外网访问后重新执行：clash tun doctor"
       fi
       ;;
     *)
-      echo "👉 请查看运行日志定位流量验证失败原因：clashctl logs"
+      echo "👉 请查看运行日志定位流量验证失败原因：clash logs"
       ;;
   esac
 }
@@ -6383,8 +6389,8 @@ tun_recommendation_lines() {
 
   if [ "$kernel_support" = "limited" ] && [ "$enabled" != "true" ]; then
     echo "1. 当前内核为 clash，Tun 仅按降级支持处理"
-    echo "2. 如需最稳妥 Tun 体验，建议先执行：clashctl config kernel mihomo"
-    echo "3. 再开启 Tun：clashctl tun on"
+    echo "2. 如需最稳妥 Tun 体验，建议先执行：clash config kernel mihomo"
+    echo "3. 再开启 Tun：clash tun on"
     return 0
   fi
 
@@ -6399,9 +6405,9 @@ tun_recommendation_lines() {
     fi
 
     echo "1. Tun 已生效，可继续使用"
-    echo "2. 如需恢复普通代理模式，执行：clashctl tun off"
+    echo "2. 如需恢复普通代理模式，执行：clash tun off"
     if [ "$kernel_support" = "limited" ]; then
-      echo "3. 当前 Tun 运行在 clash 内核上，如需更稳妥体验可切换：clashctl config kernel mihomo"
+      echo "3. 当前 Tun 运行在 clash 内核上，如需更稳妥体验可切换：clash config kernel mihomo"
     fi
 
     return 0
@@ -6411,7 +6417,7 @@ tun_recommendation_lines() {
   [ -n "${disable_result:-}" ] || disable_result="unknown"
 
   if [ "$disable_result" != "ok" ]; then
-    echo "1. Tun 关闭后仍有残留，建议执行：clashctl tun off"
+    echo "1. Tun 关闭后仍有残留，建议执行：clash tun off"
     echo "2. 如仍异常，执行：clashoff && clashon"
     return 0
   fi
@@ -6421,12 +6427,12 @@ tun_recommendation_lines() {
       container-risky)
         echo "👉 当前容器环境已被裁决为高风险：${risk_reason:-容器条件不足}"
         tun_container_runtime_hint_lines || true
-        echo "👉 条件满足后再执行：clashctl tun on"
+        echo "👉 条件满足后再执行：clash tun on"
         ;;
       *)
         echo "1. 当前环境不满足 Tun 基础条件"
         echo "2. 优先检查：/dev/net/tun、CAP_NET_ADMIN、ip 命令"
-        echo "3. 条件满足后再执行：clashctl tun on"
+        echo "3. 条件满足后再执行：clash tun on"
         ;;
     esac
     return 0
@@ -6434,28 +6440,28 @@ tun_recommendation_lines() {
 
   if [ "${config_tun_enabled:-false}" = "true" ] && [ "$enabled" != "true" ]; then
     echo "1. 当前运行配置仍保留 Tun 开启状态"
-    echo "2. 建议先执行：clashctl tun off"
-    echo "3. 再观察：clashctl tun doctor"
+    echo "2. 建议先执行：clash tun off"
+    echo "3. 再观察：clash tun doctor"
     return 0
   fi
 
   case "$container_mode" in
     container-safe)
-      echo "1. 当前容器环境已通过保守裁决，可尝试开启 Tun：clashctl tun on"
-      echo "2. 开启后立即执行：clashctl tun doctor"
+      echo "1. 当前容器环境已通过保守裁决，可尝试开启 Tun：clash tun on"
+      echo "2. 开启后立即执行：clash tun doctor"
       echo "3. 若未生效，优先检查宿主机权限与设备映射"
       return 0
       ;;
     container-risky)
       echo "👉 当前容器环境属于高风险，不建议直接开启 Tun：${risk_reason:-容器条件不足}"
       tun_container_runtime_hint_lines || true
-      echo "👉 修复后再执行：clashctl tun on"
+      echo "👉 修复后再执行：clash tun on"
       return 0
       ;;
   esac
 
-  echo "1. 当前环境可尝试开启 Tun：clashctl tun on"
-  echo "2. 开启后建议立即执行：clashctl tun doctor"
+  echo "1. 当前环境可尝试开启 Tun：clash tun on"
+  echo "2. 开启后建议立即执行：clash tun doctor"
 }
 
 tun_problem_lines() {
@@ -6587,7 +6593,7 @@ sync_tun_target_state() {
 
   ui_error "Tun 配置同步失败，已回滚状态文件"
   ui_error "$error_summary"
-  ui_next "clashctl tun doctor"
+  ui_next "clash tun doctor"
   return "$rc"
 }
 
@@ -6617,25 +6623,25 @@ cmd_tun() {
     *)
       ui_title "🧪 Tun 模式管理"
       echo "📜 用法："
-      echo "  clashctl tun"
-      echo "  clashctl tun status"
-      echo "  clashctl tun on"
-      echo "  clashctl tun off"
-      echo "  clashctl tun on-proxy-off"
-      echo "  clashctl tun off-proxy-on"
-      echo "  clashctl tun doctor"
-      echo "  clashctl tun logs"
+      echo "  clash tun"
+      echo "  clash tun status"
+      echo "  clash tun on"
+      echo "  clash tun off"
+      echo "  clash tun on-proxy-off"
+      echo "  clash tun off-proxy-on"
+      echo "  clash tun doctor"
+      echo "  clash tun logs"
       echo
       echo "🧩 说明："
       echo "  Tun 属于高级接管能力"
       echo "  开启前应确认环境支持 /dev/net/tun、权限与网络能力"
       echo
       echo "💡 常用动作："
-      echo "  clashctl tun status"
-      echo "  clashctl tun doctor"
+      echo "  clash tun status"
+      echo "  clash tun doctor"
       echo "  clashtun on"
       echo
-      ui_next "clashctl tun doctor"
+      ui_next "clash tun doctor"
       ui_blank
       ;;
   esac
@@ -6729,7 +6735,7 @@ cmd_add() {
   ensure_add_use_prerequisites
 
   if [ "${1:-}" = "local" ]; then
-    [ "$#" -eq 1 ] || die_usage "add local 参数不合法" "clashctl add local"
+    [ "$#" -eq 1 ] || die_usage "add local 参数不合法" "clash add local"
     sub_url="$(add_prompt_local_url)"
     cmd_add "$sub_url"
     return $?
@@ -6787,13 +6793,13 @@ cmd_use() {
         if [ -n "${active:-}" ]; then
           ui_title "🐱 当前无更优推荐，保持当前"
           ui_kv "🚩" "当前主订阅" "$active"
-          ui_next "clashctl select  选择节点"
+          ui_next "clash select  选择节点"
           ui_blank
           return 0
         fi
 
         ui_title "❗ 当前没有可推荐的订阅"
-        ui_next "clashctl select  选择节点"
+        ui_next "clash select  选择节点"
         ui_blank
         return 1
       fi
@@ -6801,7 +6807,7 @@ cmd_use() {
       if [ "${recommended:-}" = "${active:-}" ]; then
         ui_title "🐱 当前已是推荐订阅，无需切换"
         [ -n "${active:-}" ] && ui_kv "📡" "当前主订阅" "$active"
-        ui_next "clashctl select  选择节点"
+        ui_next "clash select  选择节点"
         ui_blank
         return 0
       fi
@@ -6936,22 +6942,22 @@ health_recommendation_lines() {
 
   case "$SYSTEM_STATE" in
     ready)
-      echo "💡 clashctl status"
-      echo "💡 clashctl select"
+      echo "💡 clash status"
+      echo "💡 clash select"
       ;;
     stopped)
       if [ "$SUBSCRIPTION_STATE" = "missing" ]; then
-        echo "💡 clashctl add <订阅链接>"
+        echo "💡 clash add <订阅链接>"
       else
         echo "💡 clashon"
       fi
       ;;
     degraded|broken)
-      echo "💡 clashctl doctor"
-      echo "💡 clashctl status --verbose"
+      echo "💡 clash doctor"
+      echo "💡 clash status --verbose"
       ;;
     *)
-      echo "💡 clashctl status"
+      echo "💡 clash status"
       ;;
   esac
 }
@@ -6962,7 +6968,7 @@ cmd_ls() {
   case "${1:-}" in
     "") ;;
     *)
-      die_usage "ls 参数不合法" "clashctl ls"
+      die_usage "ls 参数不合法" "clash ls"
       ;;
   esac
 
@@ -6994,7 +7000,7 @@ cmd_health() {
         if [ -z "${target_name:-}" ]; then
           target_name="$1"
         else
-          die_usage "health 参数不合法" "clashctl health [名称] [--verbose]"
+          die_usage "health 参数不合法" "clash health [名称] [--verbose]"
         fi
         ;;
     esac
@@ -7008,13 +7014,13 @@ cmd_health() {
       ui_blank
 
       ui_section "建议操作"
-      echo "  💡 clashctl use ${target_name}"
-      echo "  💡 clashctl ls"
+      echo "  💡 clash use ${target_name}"
+      echo "  💡 clash ls"
       ui_blank
       return 0
     fi
 
-    ui_info "订阅健康已收敛到 clashctl ls"
+    ui_info "订阅健康已收敛到 clash ls"
     cmd_ls
     return $?
   fi
@@ -7024,13 +7030,13 @@ cmd_health() {
     print_subscription_health_one "$target_name" | sed 's/^/  /'
     ui_blank
     ui_section "建议操作"
-    echo "  💡 clashctl use ${target_name}"
-    echo "  💡 clashctl ls"
+    echo "  💡 clash use ${target_name}"
+    echo "  💡 clash ls"
     ui_blank
     return 0
   fi
 
-  ui_info "订阅健康已收敛到 clashctl ls"
+  ui_info "订阅健康已收敛到 clash ls"
   cmd_ls
 }
 
@@ -7062,7 +7068,7 @@ cmd_proxy_groups() {
   fi
 
   if ! proxy_controller_reachable 2>/dev/null; then
-    die_state "控制器不可访问" "clashctl doctor"
+    die_state "控制器不可访问" "clash doctor"
   fi
 
   ui_title "📦 策略组列表"
@@ -7081,7 +7087,7 @@ cmd_proxy_groups() {
   fi
 
   ui_blank
-  ui_next "clashctl select"
+  ui_next "clash select"
   ui_blank
 }
 
@@ -7095,7 +7101,7 @@ cmd_proxy_current() {
   fi
 
   if ! proxy_controller_reachable 2>/dev/null; then
-    die_state "控制器不可访问" "clashctl doctor"
+    die_state "控制器不可访问" "clash doctor"
   fi
 
   if [ -n "${1:-}" ]; then
@@ -7130,14 +7136,14 @@ cmd_proxy_nodes() {
   local current node found="false"
 
   prepare
-  [ -n "${group:-}" ] || die "请使用 clashctl select 切换节点"
+  [ -n "${group:-}" ] || die "请使用 clash select 切换节点"
 
   if ! status_is_running; then
     die_state "代理内核未运行" "clashon"
   fi
 
   if ! proxy_controller_reachable 2>/dev/null; then
-    die_state "控制器不可访问" "clashctl doctor"
+    die_state "控制器不可访问" "clash doctor"
   fi
 
   current="$(proxy_group_current_display "$group" 2>/dev/null || true)"
@@ -7162,7 +7168,7 @@ cmd_proxy_nodes() {
   fi
 
   ui_blank
-  ui_next "clashctl select"
+  ui_next "clash select"
   ui_blank
 }
 
@@ -7267,19 +7273,19 @@ cmd_sub() {
       ;;
     use)
       shift || true
-      [ -n "${1:-}" ] || die "用法：clashctl sub use <名称>"
+      [ -n "${1:-}" ] || die "用法：clash sub use <名称>"
       set_active_subscription "$1"
       apply_runtime_change_after_config_mutation
       ;;
     set)
       shift || true
-      [ -n "${1:-}" ] || die "用法：clashctl sub set <url> [name]（固定 convert，推荐使用：clashctl add <订阅链接>）"
+      [ -n "${1:-}" ] || die "用法：clash sub set <url> [name]（固定 convert，推荐使用：clash add <订阅链接>）"
       set_subscription "${1:-}" "convert" "${2:-default}"
       apply_runtime_change_after_config_mutation
       ;;
     enable)
       shift || true
-      [ -n "${1:-}" ] || die "📜 用法：clashctl sub enable <名称>"
+      [ -n "${1:-}" ] || die "📜 用法：clash sub enable <名称>"
       enable_subscription "$1"
       regenerate_config
       apply_runtime_change_after_config_mutation
@@ -7287,7 +7293,7 @@ cmd_sub() {
       ;;
     disable)
       shift || true
-      [ -n "${1:-}" ] || die "📜 用法：clashctl sub disable <名称>"
+      [ -n "${1:-}" ] || die "📜 用法：clash sub disable <名称>"
       disable_subscription "$1"
       regenerate_config
       apply_runtime_change_after_config_mutation
@@ -7295,8 +7301,8 @@ cmd_sub() {
       ;;
     rename)
       shift || true
-      [ -n "${1:-}" ] || die "📜 用法：clashctl sub rename <旧名称> <新名称>"
-      [ -n "${2:-}" ] || die "📜 用法：clashctl sub rename <旧名称> <新名称>"
+      [ -n "${1:-}" ] || die "📜 用法：clash sub rename <旧名称> <新名称>"
+      [ -n "${2:-}" ] || die "📜 用法：clash sub rename <旧名称> <新名称>"
       rename_subscription "$1" "$2"
       regenerate_config
       apply_runtime_change_after_config_mutation
@@ -7304,7 +7310,7 @@ cmd_sub() {
       ;;
     remove|rm|del)
       shift || true
-      [ -n "${1:-}" ] || die "📜 用法：clashctl sub remove <名称>"
+      [ -n "${1:-}" ] || die "📜 用法：clash sub remove <名称>"
       remove_subscription "$1"
       regenerate_config
       apply_runtime_change_after_config_mutation
@@ -7317,14 +7323,14 @@ cmd_sub() {
     "")
       ui_title "📡 订阅管理"
       echo "📜 用法："
-      echo "  clashctl sub update"
-      echo "  clashctl sub list"
-      echo "  clashctl sub use <名称>"
-      echo "  clashctl sub enable <名称>"
-      echo "  clashctl sub disable <名称>"
-      echo "  clashctl sub rename <旧名称> <新名称>"
-      echo "  clashctl sub remove <名称>"
-      echo "  clashctl sub health [名称]"
+      echo "  clash sub update"
+      echo "  clash sub list"
+      echo "  clash sub use <名称>"
+      echo "  clash sub enable <名称>"
+      echo "  clash sub disable <名称>"
+      echo "  clash sub rename <旧名称> <新名称>"
+      echo "  clash sub remove <名称>"
+      echo "  clash sub health [名称]"
       echo
       echo "🧩 说明："
       echo "  add / use / ls / sub update 属于主路径"
@@ -7332,16 +7338,16 @@ cmd_sub() {
       echo "  其他 sub 子命令用于高级维护操作"
       echo
       echo "💡 常用动作："
-      echo "  clashctl sub update"
-      echo "  clashctl sub list"
-      echo "  clashctl sub health"
-      echo "  clashctl sub enable <名称>"
+      echo "  clash sub update"
+      echo "  clash sub list"
+      echo "  clash sub health"
+      echo "  clash sub enable <名称>"
       echo
-      ui_next "clashctl ls"
+      ui_next "clash ls"
       ui_blank
       ;;
     *)
-      die_usage "未知的 sub 子命令：$1" "clashctl sub"
+      die_usage "未知的 sub 子命令：$1" "clash sub"
       ;;
   esac
 }
@@ -7358,7 +7364,7 @@ proxy_select_interactive() {
   fi
 
   if ! proxy_controller_reachable 2>/dev/null; then
-    die_state "控制器不可访问" "clashctl doctor"
+    die_state "控制器不可访问" "clash doctor"
   fi
 
   if [ -z "${group:-}" ]; then
@@ -7486,7 +7492,7 @@ proxy_select_interactive_guarded() {
   fi
 
   if ! proxy_controller_reachable 2>/dev/null; then
-    die_state "控制器不可访问" "clashctl doctor"
+    die_state "控制器不可访问" "clash doctor"
   fi
 
   if [ -z "${group:-}" ]; then
@@ -7544,7 +7550,7 @@ proxy_select_interactive_guarded() {
 cmd_proxy() {
   echo "⚠ 当前版本不提供 proxy 子命令"
   echo "👉 使用 clashon / clashoff 控制代理"
-  echo "👉 使用 clashctl select 切换节点"
+  echo "👉 使用 clash select 切换节点"
   return 0
 }
 
@@ -7589,7 +7595,7 @@ cmd_upgrade() {
         verbose="true"
         ;;
       *)
-        die_usage "upgrade 参数不合法" "clashctl upgrade [mihomo|clash] [-v|--verbose]"
+        die_usage "upgrade 参数不合法" "clash upgrade [mihomo|clash] [-v|--verbose]"
         ;;
     esac
     shift
@@ -7616,7 +7622,7 @@ cmd_upgrade() {
   ui_kv "🎯" "目标版本" "$target_version"
   ui_kv "🧪" "实际版本" "$actual_version"
   ui_kv "🧩" "影响范围" "仅更新代理内核，不更新项目脚本"
-  ui_next "clashctl status"
+  ui_next "clash status"
   ui_blank
 }
 
@@ -7635,7 +7641,7 @@ cmd_update() {
         regenerate_mode="true"
         ;;
       *)
-        die_usage "update 参数不合法" "clashctl update [--force] [--regenerate]"
+        die_usage "update 参数不合法" "clash update [--force] [--regenerate]"
         ;;
     esac
     shift
@@ -7654,7 +7660,7 @@ cmd_update() {
   else
     ui_kv "🚨" "配置状态" "未自动重新生成"
   fi
-  ui_next "clashctl status"
+  ui_next "clash status"
   ui_blank
 }
 
@@ -7755,7 +7761,7 @@ print_select_feedback() {
   ui_kv "🚀" "当前节点" "${current:-<unknown>}"
 
   main_feedback_runtime_state
-  ui_next "clashctl status"
+  ui_next "clash status"
   ui_blank
 }
 
@@ -7806,7 +7812,7 @@ cmd_proxy_groups() {
   fi
 
   if ! proxy_controller_reachable 2>/dev/null; then
-    die_state "控制器不可访问" "clashctl doctor"
+    die_state "控制器不可访问" "clash doctor"
   fi
 
   ui_title "📦 策略组列表"
@@ -7824,7 +7830,7 @@ cmd_proxy_groups() {
   fi
 
   ui_blank
-  ui_next "clashctl select"
+  ui_next "clash select"
   ui_blank
 }
 
@@ -7838,7 +7844,7 @@ cmd_proxy_current() {
   fi
 
   if ! proxy_controller_reachable 2>/dev/null; then
-    die_state "控制器不可访问" "clashctl doctor"
+    die_state "控制器不可访问" "clash doctor"
   fi
 
   if [ -n "${1:-}" ]; then
@@ -7871,14 +7877,14 @@ cmd_proxy_nodes() {
   local current node found="false"
 
   prepare
-  [ -n "${group:-}" ] || die "请使用 clashctl select 切换节点"
+  [ -n "${group:-}" ] || die "请使用 clash select 切换节点"
 
   if ! status_is_running; then
     die_state "代理内核未运行" "clashon"
   fi
 
   if ! proxy_controller_reachable 2>/dev/null; then
-    die_state "控制器不可访问" "clashctl doctor"
+    die_state "控制器不可访问" "clash doctor"
   fi
 
   current="$(proxy_group_current_display "$group" 2>/dev/null || true)"
@@ -7903,7 +7909,7 @@ cmd_proxy_nodes() {
   fi
 
   ui_blank
-  ui_next "clashctl select"
+  ui_next "clash select"
   ui_blank
 }
 
@@ -7966,7 +7972,7 @@ proxy_select_interactive_guarded() {
   fi
 
   if ! proxy_controller_reachable 2>/dev/null; then
-    die_state "控制器不可访问" "clashctl doctor"
+    die_state "控制器不可访问" "clash doctor"
   fi
 
   if [ -z "${group:-}" ]; then
@@ -8040,7 +8046,7 @@ proxy_select_direct() {
   local node="${2:-}"
 
   if [ "$#" -ne 2 ]; then
-    die_usage "select 参数不合法" "clashctl select <策略组> <节点>"
+    die_usage "select 参数不合法" "clash select <策略组> <节点>"
   fi
 
   prepare
@@ -8050,7 +8056,7 @@ proxy_select_direct() {
   fi
 
   if ! proxy_controller_reachable 2>/dev/null; then
-    die_state "控制器不可访问" "clashctl doctor"
+    die_state "控制器不可访问" "clash doctor"
   fi
 
   proxy_group_select "$group" "$node"

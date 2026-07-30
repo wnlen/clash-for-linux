@@ -216,12 +216,12 @@ _clash_alias_unset_shell_proxy() {
 }
 
 _clash_alias_status_next() {
-  _clashctl_real status-next 2>/dev/null || echo "clashctl status"
+  _clashctl_real status-next 2>/dev/null || echo "clash status"
 }
 
 _clash_alias_prepare_on() {
   # 这里不直接自己做 regenerate / restart / fallback，
-  # 而是统一交给 clashctl on 主链处理，避免双执行链。
+  # 而是统一交给 clash on 主链处理，避免双执行链。
   # shell 层只负责“闭环体验”，不抢 runtime / build 的职责。
   return 0
 }
@@ -258,12 +258,12 @@ _clash_alias_run_on() {
 
   if [ "$on_rc" -ne 0 ]; then
     if _clash_alias_export_system_proxy; then
-      echo "🚨 clashctl on 返回非 0，但系统代理已写入，继续同步当前 Shell（底层返回码：$on_rc）" >&2
+      echo "🚨 clash on 返回非 0，但系统代理已写入，继续同步当前 Shell（底层返回码：$on_rc）" >&2
       if [ -s "$on_output" ]; then
         sed 's/^/  /' "$on_output" >&2
       fi
     elif _clash_alias_proxy_on_system; then
-      echo "🚨 clashctl on 返回非 0，已通过 proxy on 继续同步当前 Shell（底层返回码：$on_rc）" >&2
+      echo "🚨 clash on 返回非 0，已通过 proxy on 继续同步当前 Shell（底层返回码：$on_rc）" >&2
       if [ -s "$on_output" ]; then
         sed 's/^/  /' "$on_output" >&2
       fi
@@ -304,7 +304,7 @@ _clash_alias_auto_restore_proxy() {
   return 0
 }
 
-clashctl() {
+_clash_command() {
   case "${1:-}" in
     on)
       shift || true
@@ -349,101 +349,111 @@ clashctl() {
   esac
 }
 
-# 快捷入口全部收敛到 clashctl 函数
+clashctl() {
+  _clash_command "$@"
+}
+
+if [ "${CLASH_FOR_LINUX_CLASH_ENTRY_MANAGED:-false}" = "true" ]; then
+  clash() {
+    _clash_command "$@"
+  }
+fi
+
+# 快捷入口全部收敛到统一命令函数
 clashon() {
-  clashctl on "$@" || return $?
+  _clash_command on "$@" || return $?
 }
 
 clashoff() {
-  clashctl off "$@" || return $?
+  _clash_command off "$@" || return $?
 }
 
 clashproxy() {
   case "${1:-show}" in
     on)
-      clashctl proxy on
+      _clash_command proxy on
       ;;
     off)
-      clashctl proxy off
+      _clash_command proxy off
       ;;
     show|status)
-      clashctl proxy show
+      _clash_command proxy show
       ;;
     groups)
-      clashctl proxy groups
+      _clash_command proxy groups
       ;;
     current)
       shift || true
-      clashctl proxy current "$@"
+      _clash_command proxy current "$@"
       ;;
     nodes)
       shift || true
-      clashctl proxy nodes "$@"
+      _clash_command proxy nodes "$@"
       ;;
     select)
       shift || true
-      clashctl proxy select "$@"
+      _clash_command proxy select "$@"
       ;;
     *)
       echo "📜 用法：clashproxy [show|on|off|groups|current|nodes|select]"
-      echo "💡 主路径切节点请使用：clashselect 或 clashctl select"
+      echo "💡 主路径切节点请使用：clashselect 或 clash select"
       return 2
       ;;
   esac
 }
 
 clashls() {
-  clashctl ls "$@"
+  _clash_command ls "$@"
 }
 
 clashsub() {
-  clashctl sub "$@"
+  _clash_command sub "$@"
 }
 
 clashselect() {
-  clashctl select "$@"
+  _clash_command select "$@"
 }
 
 clashtest() {
-  clashctl test "$@"
+  _clash_command test "$@"
 }
 
 clashui() {
-  clashctl ui "$@"
+  _clash_command ui "$@"
 }
 
 clashsecret() {
-  clashctl secret "$@"
+  _clash_command secret "$@"
 }
 
 clashtun() {
-  clashctl tun "$@"
+  _clash_command tun "$@"
 }
 
 clashrelay() {
-  clashctl relay "$@"
+  _clash_command relay "$@"
 }
 
 clashupgrade() {
-  clashctl upgrade "$@"
+  _clash_command upgrade "$@"
 }
 
 clashmixin() {
   case "${1:-}" in
     -e|--edit)
-      clashctl mixin edit
+      _clash_command mixin edit
       ;;
     -c|--raw)
-      clashctl mixin raw
+      _clash_command mixin raw
       ;;
     -r|--runtime)
-      clashctl mixin runtime
+      _clash_command mixin runtime
       ;;
     "")
-      clashctl mixin
+      _clash_command mixin
       ;;
     *)
-      clashctl mixin "$@"
+      _clash_command mixin "$@"
       ;;
   esac
 }

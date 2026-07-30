@@ -204,7 +204,7 @@ update_project_code() {
   fi
 
   if git_has_local_changes && [ "$force_mode" != "true" ]; then
-    die "检测到本地有未提交改动，请先提交，或使用 clashctl update --force 强制覆盖"
+    die "检测到本地有未提交改动，请先提交，或使用 clash update --force 强制覆盖"
   fi
 
   info "正在获取最新代码"

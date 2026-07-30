@@ -41,7 +41,7 @@ run_help_case() {
     return 1
   fi
 
-  if ! printf '%s\n' "$output" | grep -Fq "clashctl select <策略组> <节点>"; then
+  if ! printf '%s\n' "$output" | grep -Fq "clash select <策略组> <节点>"; then
     echo "not ok - select help missing direct usage" >&2
     printf '%s\n' "$output" >&2
     return 1

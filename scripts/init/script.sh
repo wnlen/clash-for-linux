@@ -302,8 +302,9 @@ wait_install_runtime_ready() {
   write_runtime_value "INSTALL_VERIFY_CONTROLLER_READY" "$controller_ready"
 }
 
-clashctl_command_available() {
-  [ -x "$(clashctl_entry_target)" ] \
+clash_command_available() {
+  clash_entry_is_managed \
+    || [ -x "$(clashctl_entry_target)" ] \
     || [ -x "$(clashctl_bin_entry_target)" ] \
     || command -v clashctl >/dev/null 2>&1
 }
@@ -314,12 +315,12 @@ post_install_verify() {
   local controller_ready="false"
   local bind_failure_kind="" bind_failure_port=""
 
-  if clashctl_command_available; then
+  if clash_command_available; then
     write_runtime_value "INSTALL_VERIFY_COMMAND_READY" "true"
   else
     write_runtime_value "INSTALL_VERIFY_COMMAND_READY" "false"
     write_runtime_event_value "RUNTIME_LAST_INSTALL_READY" "false"
-    die "clashctl 安装失败，命令不可用"
+    die "clash 管理命令安装失败，命令不可用"
   fi
 
   if [ -n "$(subscription_url 2>/dev/null || true)" ]; then
@@ -357,8 +358,8 @@ post_install_verify() {
     echo "🚫 安装后验证发现：代理端口 ${bind_failure_port:-unknown} 绑定被系统拒绝（非端口冲突）"
     echo "📌 修改端口通常无法解决；install 阶段不会通过自动换端口处理该问题"
     install_mixed_port_bind_observation_line 2>/dev/null || true
-    echo "👉 下一步：clashctl doctor"
-    echo "👉 日志：clashctl logs mihomo"
+    echo "👉 下一步：clash doctor"
+    echo "👉 日志：clash logs mihomo"
     echo
   fi
 

@@ -243,23 +243,23 @@ install_build_result_text() {
 install_next_step_text() {
   case "$(install_state_text)" in
     ready)
-      echo "clashctl select"
+      echo "clash select"
       ;;
     verifying)
       if install_has_subscription; then
         echo "clashon"
       else
-        echo "clashctl add <订阅链接>"
+        echo "clash add <订阅链接>"
       fi
       ;;
     broken)
-      echo "clashctl doctor"
+      echo "clash doctor"
       ;;
     stopped)
-      echo "clashctl add <订阅链接>"
+      echo "clash add <订阅链接>"
       ;;
     *)
-      echo "clashctl status"
+      echo "clash status"
       ;;
   esac
 }
@@ -951,7 +951,7 @@ download_file() {
 
     rm -f "$fetch_tmp" 2>/dev/null || true
     die_state "下载失败：${asset_name}" \
-              "请检查网络连通性，或在 .env 中配置下载源后重试；也可先执行 clashctl doctor"
+              "请检查网络连通性，或在 .env 中配置下载源后重试；也可先执行 clash doctor"
   fi
 
   ordered_entries="$(
@@ -1012,7 +1012,7 @@ EOF
 
   rm -f "$fetch_tmp" 2>/dev/null || true
   die_state "下载失败：${asset_name}" \
-            "请检查网络连通性，或在 .env 中配置下载源后重试；也可先执行 clashctl doctor"
+            "请检查网络连通性，或在 .env 中配置下载源后重试；也可先执行 clash doctor"
 }
 
 download_text_tmp_file() {
@@ -2103,7 +2103,7 @@ guard_sudo_on_user_install() {
   echo "❗ 操作被拒绝：user 安装模式不支持以 sudo 运行"
   echo "🚨 原因：sudo 会将 runtime 文件写成 root:root，导致 systemctl --user 无法访问"
   echo "👤 请以安装用户（${SUDO_USER}）直接执行："
-  echo "   clashctl tun ${_action}"
+  echo "   clash tun ${_action}"
   echo
   return 1
 }
@@ -2535,6 +2535,51 @@ clashctl_bin_entry_target() {
   echo "$(command_install_dir)/clashctl-bin"
 }
 
+clash_entry_target() {
+  echo "$(command_install_dir)/clash"
+}
+
+clash_entry_marker() {
+  echo "# clash-for-linux managed command: clash"
+}
+
+clash_entry_is_managed() {
+  local target="${1:-}"
+
+  [ -n "${target:-}" ] || target="$(clash_entry_target)"
+  [ -f "$target" ] || return 1
+  grep -Fqx "$(clash_entry_marker)" "$target" 2>/dev/null
+}
+
+install_clash_entry() {
+  local target bin_target existing_command=""
+
+  target="$(clash_entry_target)"
+  bin_target="$(clashctl_bin_entry_target)"
+
+  if [ -e "$target" ] || [ -L "$target" ]; then
+    if ! clash_entry_is_managed "$target"; then
+      existing_command="$target"
+      warn "检测到已有 clash 命令，未覆盖：$existing_command"
+      warn "本项目仍可使用 clashctl；如需 clash 入口，请先自行处理同名命令"
+      return 0
+    fi
+  elif command -v clash >/dev/null 2>&1; then
+    existing_command="$(command -v clash 2>/dev/null || true)"
+    warn "检测到已有 clash 命令，未覆盖：$existing_command"
+    warn "本项目仍可使用 clashctl；如需 clash 入口，请先自行处理同名命令"
+    return 0
+  fi
+
+  cat > "$target" <<EOF
+#!/usr/bin/env bash
+$(clash_entry_marker)
+set -euo pipefail
+exec "$bin_target" "\$@"
+EOF
+  chmod +x "$target"
+}
+
 ensure_command_install_dir_in_shell_path() {
   local install_dir shell_rc home_dir
 
@@ -2582,6 +2627,7 @@ exec "$bin_target" "\$@"
 EOF
   chmod +x "$target"
 
+  install_clash_entry
   ensure_command_install_dir_in_shell_path
 }
 
@@ -2635,7 +2681,7 @@ cleanup_legacy_shell_entries() {
 }
 
 install_shell_alias_entry() {
-  local profile_file alias_file shell_rc bash_completion_file zsh_completion_file home_dir system_zsh_rc
+  local profile_file alias_file shell_rc bash_completion_file zsh_completion_file home_dir system_zsh_rc clash_entry_managed
 
   cleanup_legacy_shell_entries
 
@@ -2643,6 +2689,8 @@ install_shell_alias_entry() {
   alias_file="$(alias_source_file)"
   bash_completion_file="$(bash_completion_entry_file)"
   zsh_completion_file="$(zsh_completion_entry_file)"
+  clash_entry_managed="false"
+  clash_entry_is_managed && clash_entry_managed="true"
 
   mkdir -p "$(dirname "$profile_file")"
   [ -f "$alias_file" ] || die "未找到 alias 脚本：$alias_file"
@@ -2651,6 +2699,7 @@ cat > "$profile_file" <<EOF
 #!/usr/bin/env bash
 # clash-for-linux shell entry
 export PATH="$(command_install_dir):\$PATH"
+export CLASH_FOR_LINUX_CLASH_ENTRY_MANAGED="$clash_entry_managed"
 
 if [ -z "\${CLASH_FOR_LINUX_SHELL_LOADED:-}" ] \
   && [ -r "$alias_file" ] \
@@ -2705,6 +2754,9 @@ install_clashctl_completion() {
 }
 
 remove_clashctl_entry() {
+  if clash_entry_is_managed; then
+    rm -f "$(clash_entry_target)" 2>/dev/null || true
+  fi
   rm -f "$(clashctl_entry_target)" "$(clashctl_bin_entry_target)" 2>/dev/null || true
   remove_alias_command_wrappers
 }
@@ -3054,31 +3106,31 @@ install_status_label() {
 install_default_next_action() {
   case "$(install_status_text)" in
     ready)
-      echo "clashctl select"
+      echo "clash select"
       ;;
     stopped)
       if install_has_subscription; then
         echo "clashon"
       else
-        echo "clashctl add <订阅链接>"
+        echo "clash add <订阅链接>"
       fi
       ;;
     verifying)
       if status_is_running 2>/dev/null; then
-        echo "clashctl status"
+        echo "clash status"
       else
         echo "clashon"
       fi
       ;;
     broken)
       if install_has_subscription; then
-        echo "clashctl doctor"
+        echo "clash doctor"
       else
-        echo "clashctl add <订阅链接>"
+        echo "clash add <订阅链接>"
       fi
       ;;
     *)
-      echo "clashctl status"
+      echo "clash status"
       ;;
   esac
 }
@@ -3202,6 +3254,11 @@ print_install_summary() {
   echo "💻 环境模式：${env_mode_text:-unknown}"
   echo "📁 安装路径：$project_path"
   echo "👤 安装方式：${install_actor} / ${install_scope_text:-unknown}"
+  if clash_entry_is_managed; then
+    echo "⌨️ 主命令：clash"
+  else
+    echo "⚠️ 主命令：clash 同名冲突，未由本项目接管（兼容入口 clashctl 仍可用）"
+  fi
   echo "🔧 运行后端：${backend_text:-unknown}"
   echo "📦 订阅：$subscription_text"
   [ -n "${node_count:-}" ] && echo "🔢 节点数量：$node_count"
@@ -3211,8 +3268,8 @@ print_install_summary() {
       echo "🚫 安装后验证：代理端口绑定被系统拒绝（非端口冲突）"
       echo "📌 这通常是环境限制，修改端口通常无法解决"
       install_mixed_port_bind_observation_line 2>/dev/null || true
-      echo "👉 下一步：clashctl doctor"
-      echo "👉 日志：clashctl logs mihomo"
+      echo "👉 下一步：clash doctor"
+      echo "👉 日志：clash logs mihomo"
       ;;
     address_in_use)
       :
@@ -3225,5 +3282,5 @@ print_install_summary() {
 
   echo
   echo "💡 clashon / clashoff 为 shell 快捷入口；新终端会自动生效"
-  echo "💡 当前终端若暂不可用，请先使用 clashctl on / clashctl off"
+  echo "💡 当前终端若暂不可用，请先使用 clash on / clash off"
 }

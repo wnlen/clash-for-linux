@@ -65,7 +65,7 @@ if [ -n "$(subscription_url 2>/dev/null || true)" ]; then
     if [ -f "$RUNTIME_DIR/tmp/subscription-invalid-preview.txt" ]; then
       echo "🧾 调试预览：$RUNTIME_DIR/tmp/subscription-invalid-preview.txt"
     fi
-    echo "👉 下一步：clashctl doctor"
+    echo "👉 下一步：clash doctor"
     echo
     exit 1
   fi

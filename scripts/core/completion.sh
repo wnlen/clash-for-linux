@@ -360,7 +360,7 @@ _clash_for_linux_complete_command() {
   cur="${COMP_WORDS[COMP_CWORD]:-}"
 
   case "$root" in
-    clashctl)
+    clash|clashctl)
       if [ "$COMP_CWORD" -eq 1 ]; then
         _clash_for_linux_complete_top_level "$cur"
         return 0
@@ -441,6 +441,9 @@ _clash_for_linux_complete_command() {
   esac
 }
 
+if [ "${CLASH_FOR_LINUX_CLASH_ENTRY_MANAGED:-false}" = "true" ]; then
+  complete -F _clash_for_linux_complete_command clash
+fi
 complete -F _clash_for_linux_complete_command clashctl
 complete -F _clash_for_linux_complete_command clashtest
 complete -F _clash_for_linux_complete_command clashsub
@@ -477,7 +480,7 @@ cmd_completion() {
       completion_emit_zsh_script
       ;;
     *)
-      die_usage "completion 参数不合法" "clashctl completion bash|zsh"
+      die_usage "completion 参数不合法" "clash completion bash|zsh"
       ;;
   esac
 }

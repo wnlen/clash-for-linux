@@ -20,7 +20,7 @@
 
 - 🚀 **自动识别系统架构**：自动下载并使用对应 Clash 内核
 - 🧪 **端口自动检测与分配**：避免冲突
-- 🔄 **多订阅管理**：可以保存多个订阅，通过 `clashctl use` 切换当前主订阅。
+- 🔄 **多订阅管理**：可以保存多个订阅，通过 `clash use` 切换当前主订阅。
 - 💫 **节点选择**：使用编号交互选择策略组和节点。
 - 🌐 **Tun 模式**：用于透明代理接管场景（需root方式安装）。
 - 🧠 **Mixin 机制**：可按需追加/覆盖 Clash 配置
@@ -56,55 +56,57 @@ bash install.sh
 
 ```bash
 〽️ 常用命令
-  clashon              🚀 开启代理
-  clashoff             ⛔ 关闭代理
-  clashctl select      💫 选择节点
-  clashctl mode        🧭 查看或切换路由模式
-  clashtest            🌐 测试当前节点访问 Google / YouTube
+  clashon           🚀 开启代理
+  clashoff          ⛔ 关闭代理
+  clash select      💫 选择节点
+  clash mode        🧭 查看或切换路由模式
+  clashtest         🌐 测试当前节点访问 Google / YouTube
 🕹️  控制台
-  clashui              🕹️  查看 Web 控制台
+  clashui           🕹️  查看 Web 控制台
 📦 订阅
-  clashctl add         ➕ 添加订阅
-  clashctl add local   ➕ 从 runtime/subscriptions 导入本地订阅
-  clashctl use         💱 切换订阅
-  clashctl ls          📜 查看订阅列表
+  clash add          ➕ 添加订阅
+  clash add local    ➕ 从 runtime/subscriptions 导入本地订阅
+  clash use          💱 切换订阅
+  clash ls           📜 查看订阅列表
 🔐 密钥管理
-  clashctl secret      🔑 查看密钥
-  clashctl secret 123  🔐 设置密钥
+  clash secret       🔑 查看密钥
+  clash secret 123   🔐 设置密钥
 📌 高级
-  clashctl lan       🏠 局域网代理管理
-  clashctl tun       🧪 Tun 模式管理（需root方式安装）
-  clashctl boot      🚦 开机代理接管管理
-  clashctl mixin     🧩 Mixin 配置管理
-  clashctl relay     🔗 多跳节点管理
-  clashctl sub       🧩 订阅高级管理（启用 / 禁用 / 重命名 / 删除）
-  clashctl upgrade   🚀 升级当前或指定内核
-  clashctl update    🔄 更新项目代码
+  clash lan          🏠 局域网代理管理
+  clash tun          🧪 Tun 模式管理（需root方式安装）
+  clash boot         🚦 开机代理接管管理
+  clash mixin        🧩 Mixin 配置管理
+  clash relay        🔗 多跳节点管理
+  clash sub          🧩 订阅高级管理（启用 / 禁用 / 重命名 / 删除）
+  clash upgrade      🚀 升级当前或指定内核
+  clash update       🔄 更新项目代码
 📜 日志
-  clashctl doctor    🩺 诊断面板
-  clashctl log/logs  📜 查看日志
+  clash doctor       🩺 诊断面板
+  clash log/logs     📜 查看日志
 
-💡 显示更多帮助命令：clashctl -h
+💡 显示更多帮助命令：clash -h
 ```
+
+`clashctl` 旧入口继续保留兼容；新文档、帮助和终端提示统一使用更简洁的 `clash`。
 
 ------
 
 ## 🧭 路由模式与节点连通性
 
 ```bash
-clashctl mode
-clashctl mode global
-clashctl mode rule
-clashctl mode direct
+clash mode
+clash mode global
+clash mode rule
+clash mode direct
 
-clashctl test
+clash test
 clashtest
 clashtest "节点选择"
 ```
 
-- `clashctl mode` 查看当前的 Clash 路由模式，支持切换 `rule`、`global`、`direct`。
-- `global` 模式使用 `GLOBAL` 策略组当前选择的策略组或节点；如需调整可执行 `clashctl select`。
-- `clashctl test` 与 `clashtest` 等价，默认测试当前路由模式对应的策略组当前选择能否访问 Google 和 YouTube，并显示延迟。
+- `clash mode` 查看当前的 Clash 路由模式，支持切换 `rule`、`global`、`direct`。
+- `global` 模式使用 `GLOBAL` 策略组当前选择的策略组或节点；如需调整可执行 `clash select`。
+- `clash test` 与 `clashtest` 等价，默认测试当前路由模式对应的策略组当前选择能否访问 Google 和 YouTube，并显示延迟。
 - 连通性测试不会切换节点；任一目标不可访问时命令返回非零状态，便于脚本判断。
 
 ------
@@ -134,7 +136,7 @@ $ clashsecret
 ```
 
 - 可通过浏览器打开 `Web` 控制台进行可视化操作，例如切换节点、查看日志等。
-- `clashctl secret` 与 `clashsecret` 都支持无参数查看、有参数直接设置。
+- `clash secret` 与 `clashsecret` 都支持无参数查看、有参数直接设置。
 - 默认使用 [zashboard](https://github.com/Zephyruso/zashboard) 作为控制台前端，如需更换可自行配置。
 - 控制台中的“浏览器出口 IP”由访问面板的浏览器发起查询，可能与远端 Mihomo 的代理出口不同；远端出口请在服务器上通过本地代理端口查询。
 - 运行配置会把 `external-ui` 指向本地 Dashboard 目录，并把 `external-ui-url` 指向 zashboard 的 `dist.zip` 下载地址；面板内 `/upgrade/ui` 会使用该地址更新前端。
@@ -147,32 +149,32 @@ $ clashsecret
 项目默认开启局域网代理：运行配置会写入 `allow-lan: true`，并把 `external-controller` 绑定到 `0.0.0.0`，避免订阅文件里的 `allow-lan: false` 覆盖项目默认值。
 
 ```bash
-clashctl lan status
-clashctl lan on
-clashctl lan off
+clash lan status
+clash lan on
+clash lan off
 ```
 
 开启后，同一局域网设备可把 HTTP / SOCKS 代理地址设置为 `http://<本机局域网IP>:<mixed-port>`，端口默认是 `7890`；如访问不了，请检查系统防火墙是否放行该端口。
 
 ------
 
-OpenWrt 下 root/system 安装会把 `clashctl`、`clashon`、`clashoff` 等命令入口写入 `/usr/bin`，运行状态、日志和内核二进制仍保存在项目目录的 `runtime/` 下。仅脚本模式不会注册开机自启，设备重启后需要重新执行 `clashon`。
+OpenWrt 下 root/system 安装会把 `clash`、`clashon`、`clashoff` 等命令入口写入 `/usr/bin`，运行状态、日志和内核二进制仍保存在项目目录的 `runtime/` 下。仅脚本模式不会注册开机自启，设备重启后需要重新执行 `clashon`。
 ## 🧰 常用管理命令
 
 ### 多订阅管理
 
 ```
-clashctl add <订阅链接> <名称>
-clashctl use
-clashctl ls
-clashctl sub update
+clash add <订阅链接> <名称>
+clash use
+clash ls
+clash sub update
 clashsub update                 # 兼容旧版命令
-clashctl sub
-clashctl sub list
-clashctl sub enable <名称>
-clashctl sub disable <名称>
-clashctl sub rename <旧名称> <新名称>
-clashctl sub remove <名称>
+clash sub
+clash sub list
+clash sub enable <名称>
+clash sub disable <名称>
+clash sub rename <旧名称> <新名称>
+clash sub remove <名称>
 ```
 
 WSL / 普通用户如果无权写入 `/etc/environment`，`clashon` 会自动降级：运行时照常启动，当前 Shell 代理变量生效；系统代理持久接管和开机代理保持不可用。
@@ -182,20 +184,20 @@ WSL / 普通用户如果无权写入 `/etc/environment`，`clashon` 会自动降
 推荐使用交互导入，放置目录为：`$PROJECT_DIR/runtime/subscriptions/`
 
 ```bash
-clashctl add local
+clash add local
 # 输入：clash.yaml
 ```
 
 实际等价于：
 
 ```bash
-clashctl add "file://$PROJECT_DIR/runtime/subscriptions/clash.yaml"
+clash add "file://$PROJECT_DIR/runtime/subscriptions/clash.yaml"
 ```
 
 进阶用法：也可以直接使用 `file://` 绝对路径导入：
 
 ```bash
-clashctl add "file:///绝对路径/clash.yaml" home
+clash add "file:///绝对路径/clash.yaml" home
 ```
 
 支持格式：
@@ -207,11 +209,11 @@ clashctl add "file:///绝对路径/clash.yaml" home
 ### 开机接管（内核 + 代理）
 
 ```bash
-clashctl boot status
-clashctl boot on
-clashctl boot off
-clashctl boot runtime on|off|status
-clashctl boot proxy on|off|status
+clash boot status
+clash boot on
+clash boot off
+clash boot runtime on|off|status
+clash boot proxy on|off|status
 ```
 
 - `boot runtime`：只管理内核开机自启（systemd / systemd-user 可用，script 后端为 `unsupported`）。
@@ -244,11 +246,11 @@ opkg install bash curl tar gzip coreutils-readlink unzip
 ```bash
 bash install.sh
 clashon
-clashctl status
+clash status
 clashoff
 ```
 
-OpenWrt 下 root/system 安装会把 `clashctl`、`clashon`、`clashoff` 等命令入口写入 `/usr/bin`，运行状态、日志和内核二进制仍保存在项目目录的 `runtime/` 下。仅脚本模式不会注册开机自启，设备重启后需要重新执行 `clashon`。
+OpenWrt 下 root/system 安装会把 `clash`、`clashon`、`clashoff` 等命令入口写入 `/usr/bin`，运行状态、日志和内核二进制仍保存在项目目录的 `runtime/` 下。仅脚本模式不会注册开机自启，设备重启后需要重新执行 `clashon`。
 
 ## 🏗️ 架构设计架构简述
 
@@ -258,7 +260,7 @@ OpenWrt 下 root/system 安装会把 `clashctl`、`clashon`、`clashoff` 等命�
 
 用户入口层。
 
-- `clashctl`
+- `clash`
 - `clashon`
 - `clashoff`
 - `status`
@@ -341,13 +343,13 @@ CLASH_GH_PROXY=https://ghfast.top
 ```
 
 可用镜像列表参考：<https://ghproxy.link/>  
-当前镜像使用状态可通过 `clashctl doctor` 查看。
+当前镜像使用状态可通过 `clash doctor` 查看。
 
 ### 内置运行依赖
 
 当前正式支持的架构为 `amd64`、`arm64`、`armv7`。超出这三种架构时会明确失败，不会伪装成已支持。
 
-如果安装环境访问 GitHub 很慢，可以把 Mihomo、yq、subconverter 的刚需文件跟随项目一起分发。安装和 `clashctl upgrade` 会优先读取 `resources/bin` 中与当前版本、架构对应的精确文件名；本地没有对应文件时，会回退到原来的远程下载逻辑，不影响后续升级内核。
+如果安装环境访问 GitHub 很慢，可以把 Mihomo、yq、subconverter 的刚需文件跟随项目一起分发。安装和 `clash upgrade` 会优先读取 `resources/bin` 中与当前版本、架构对应的精确文件名；本地没有对应文件时，会回退到原来的远程下载逻辑，不影响后续升级内核。
 
 Clash 仅作为兼容内核处理，固定走远程下载，不会命中 `resources/bin` 中的本地资源。
 
@@ -381,19 +383,19 @@ resources/geo/Country.mmdb
 查看当前模板：
 
 ```bash
-clashctl mixin
+clash mixin
 ```
 
 编辑：
 
 ```bash
-clashctl mixin edit
+clash mixin edit
 ```
 
 查看最终运行配置：
 
 ```bash
-clashctl mixin runtime
+clash mixin runtime
 ```
 
 ### 
@@ -403,10 +405,10 @@ clashctl mixin runtime
 ## 🔄 更新
 
 ```bash
-clashctl update
-clashctl upgrade
-clashctl upgrade mihomo
-clashctl upgrade clash
+clash update
+clash upgrade
+clash upgrade mihomo
+clash upgrade clash
 ```
 
 `update` 用于更新项目代码与运行依赖。`upgrade` 用于升级当前或指定代理内核。
@@ -416,10 +418,10 @@ clashctl upgrade clash
 ## 🧩 Mixin 配置
 
 ```bash
-clashctl mixin
-clashctl mixin edit
-clashctl mixin raw
-clashctl mixin runtime
+clash mixin
+clash mixin edit
+clash mixin raw
+clash mixin runtime
 ```
 
 Mixin 是运行配置补丁，不是订阅管理。它优先通过 `runtime/mixin.yaml`（兼容读取 `config/mixin.yaml`）对当前 active 订阅生成的运行配置执行：
@@ -451,7 +453,7 @@ append:
 编辑后执行：
 
 ```bash
-clashctl mixin edit
+clash mixin edit
 ```
 
 它会重新生成配置；如果代理正在运行，会自动重启应用。
@@ -468,8 +470,8 @@ clashui
 按域名小范围测试：
 
 ```bash
-clashctl relay add 多跳-示例 节点A 节点B --domain example.com
-clashctl relay list
+clash relay add 多跳-示例 节点A 节点B --domain example.com
+clash relay list
 ```
 
 也可以使用快捷入口：`clashrelay list`。
@@ -477,13 +479,13 @@ clashctl relay list
 全局接管：
 
 ```bash
-clashctl relay add 全局多跳 节点A 节点B --match
+clash relay add 全局多跳 节点A 节点B --match
 ```
 
 `--match` 会让所有未提前命中的流量走多跳，建议先用 `--domain` 验证链路。删除多跳配置：
 
 ```bash
-clashctl relay remove 多跳-示例
+clash relay remove 多跳-示例
 ```
 
 ------
@@ -491,22 +493,22 @@ clashctl relay remove 多跳-示例
 ## 🌐 Tun 模式
 
 ```bash
-clashctl tun on
-clashctl tun off
-clashctl tun on-proxy-off
-clashctl tun off-proxy-on
-clashctl tun doctor
-clashctl tun logs
+clash tun on
+clash tun off
+clash tun on-proxy-off
+clash tun off-proxy-on
+clash tun doctor
+clash tun logs
 ```
 
-Tun 用于透明接管链路。`tun on` 只负责开启 Tun，不会自动关闭系统代理；如需切换到 Tun 接管并关闭系统代理，使用 `clashctl tun on-proxy-off`。如需关闭 Tun 并恢复普通系统代理模式，使用 `clashctl tun off-proxy-on`。
+Tun 用于透明接管链路。`tun on` 只负责开启 Tun，不会自动关闭系统代理；如需切换到 Tun 接管并关闭系统代理，使用 `clash tun on-proxy-off`。如需关闭 Tun 并恢复普通系统代理模式，使用 `clash tun off-proxy-on`。
 
-`clashctl doctor` 会检查 Tun 与系统代理是否同时开启；如果同时开启，会提示 `clashctl tun on-proxy-off`，避免流量接管路径重复或排障混淆。
+`clash doctor` 会检查 Tun 与系统代理是否同时开启；如果同时开启，会提示 `clash tun on-proxy-off`，避免流量接管路径重复或排障混淆。
 
 `tun on` 是动作反馈，展示当前关键配置和简短状态；完整证据请看：
 
 ```bash
-clashctl tun doctor
+clash tun doctor
 ```
 
 Tun 判断不会简单把 `root` 等同于拥有 `CAP_NET_ADMIN`，也不会把 main table 默认路由未切换直接等同于 Tun 未生效。诊断会结合运行后端、容器环境、进程能力、Tun adapter、policy routing、路由表和日志证据。
@@ -519,7 +521,7 @@ Tun 判断不会简单把 `root` 等同于拥有 `CAP_NET_ADMIN`，也不会把 
 bash uninstall.sh
 ```
 
-默认执行完整卸载：停止 mihomo/subconverter，关闭系统代理持久接管，删除 systemd/脚本入口、`clashctl`、命令补全、shell alias、shell proxy 持久状态、controller secret 和运行目录。完整卸载完成后，脚本会提示其他卸载方式。
+默认执行完整卸载：停止 mihomo/subconverter，关闭系统代理持久接管，删除 systemd/脚本入口、`clash`、命令补全、shell alias、shell proxy 持久状态、controller secret 和运行目录。完整卸载完成后，脚本会提示其他卸载方式。
 
 `--purge-runtime` 保留为兼容别名；默认卸载已经会清理运行目录。
 
