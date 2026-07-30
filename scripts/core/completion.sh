@@ -213,6 +213,17 @@ _clash_for_linux_complete_lan() {
   fi
 }
 
+_clash_for_linux_complete_ipv6() {
+  local cur="$1"
+  local rel_index="$2"
+
+  COMPREPLY=()
+
+  if [ "$rel_index" -eq 1 ]; then
+    _clash_for_linux_add_matches "$cur" on off auto status enable disable reset help -h --help
+  fi
+}
+
 _clash_for_linux_complete_mixin() {
   local cur="$1"
   local rel_index="$2"
@@ -347,7 +358,7 @@ _clash_for_linux_complete_top_level() {
   COMPREPLY=()
   _clash_for_linux_add_matches "$cur" \
     add use ls health select mode test on off status status-next \
-    boot log logs doctor ui secret tun dev config lan mixin \
+    boot log logs doctor ui secret tun dev config lan ipv6 mixin \
     relay profile sub proxy upgrade update completion help \
     -h --help
 }
@@ -426,6 +437,7 @@ _clash_for_linux_complete_command() {
     boot) _clash_for_linux_complete_boot "$cur" "$rel_index" "$arg1" ;;
     config) _clash_for_linux_complete_config "$cur" "$rel_index" "$arg1" ;;
     lan) _clash_for_linux_complete_lan "$cur" "$rel_index" ;;
+    ipv6) _clash_for_linux_complete_ipv6 "$cur" "$rel_index" ;;
     mixin) _clash_for_linux_complete_mixin "$cur" "$rel_index" ;;
     relay) _clash_for_linux_complete_relay "$cur" "$rel_index" "$arg1" ;;
     sub) _clash_for_linux_complete_sub "$cur" "$rel_index" "$arg1" ;;

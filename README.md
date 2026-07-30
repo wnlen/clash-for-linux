@@ -73,6 +73,7 @@ bash install.sh
   clash secret 123   🔐 设置密钥
 📌 高级
   clash lan          🏠 局域网代理管理
+  clash ipv6         🌐 IPv6 / IPv6-only 节点管理
   clash tun          🧪 Tun 模式管理（需root方式安装）
   clash boot         🚦 开机代理接管管理
   clash mixin        🧩 Mixin 配置管理
@@ -158,6 +159,32 @@ clash lan off
 
 ------
 
+## 🌐 IPv6 / Hysteria2
+
+Mihomo 支持 Hysteria2。若节点服务端只有 IPv6 地址，需要同时启用内核 IPv6 与 DNS AAAA：
+
+```bash
+clash config kernel mihomo
+clash ipv6 on
+clash ipv6 status
+```
+
+其他可用操作：
+
+```bash
+clash ipv6 off
+clash ipv6 auto
+```
+
+- `on`：同时写入 `ipv6: true` 和 `dns.ipv6: true`。
+- `off`：同时关闭内核 IPv6 与 DNS AAAA。
+- `auto`：保留订阅原有的 IPv6 设置；订阅未配置时继续使用兼容默认值。
+- 使用 IPv6-only 节点前，宿主机仍需具备可用的 IPv6 默认路由。HY2 使用 UDP / QUIC，网络或防火墙也必须允许相应 UDP 流量。
+
+也可以在 `.env` 中设置 `CLASH_IPV6=true`、`false` 或 `auto`，然后执行 `clash config regen`。
+
+------
+
 OpenWrt 下 root/system 安装会把 `clash`、`clashon`、`clashoff` 等命令入口写入 `/usr/bin`，运行状态、日志和内核二进制仍保存在项目目录的 `runtime/` 下。仅脚本模式不会注册开机自启，设备重启后需要重新执行 `clashon`。
 ## 🧰 常用管理命令
 
@@ -204,7 +231,7 @@ clash add "file:///绝对路径/clash.yaml" home
 
 - Clash / Mihomo YAML
 - Base64 订阅
-- 分享链接（`vmess` / `vless` / `trojan` / `tuic`）
+- 分享链接（`vmess` / `vless` / `trojan` / `tuic` / `hysteria2` / `hy2` / `anytls`）
 
 ### 开机接管（内核 + 代理）
 
@@ -321,12 +348,15 @@ CLASH_DOWNLOAD_BASE=https://github.com/WindSpiritSR/clash/releases/download
 CLASH_BUNDLED_ASSET_ENABLED=true
 CLASH_SHELL_AUTO_RESTORE_PROXY=true
 CLASH_PREDOWNLOAD_GEO=true
+CLASH_IPV6=auto
 ```
 
 按需设置即可，不需要每项都写。
 
 - `CLASH_SHELL_AUTO_RESTORE_PROXY`：控制登录 Shell 是否自动恢复上次 `clashon` 写入的代理变量。默认 `true` 保持兼容；如果不希望 SSH 远程登录后自动带上 `http_proxy` / `https_proxy`，设为 `false`，之后仍可手动执行 `clashon`。
 - `CLASH_PREDOWNLOAD_GEO`：控制安装期是否预下载 GEO 数据。默认 `true`，会提前下载 `Country.mmdb`、`geoip.metadb`、`GeoIP.dat`、`GeoSite.dat` 等规则分流常用资源；临时部署、只想先跑起来时可设为 `false` 跳过安装期预下载。注意：当最终运行配置实际使用 `GEOIP` 规则时，启动前仍会按需准备 `Country.mmdb`，否则 Mihomo 无法可靠加载该配置。
+- `CLASH_IPV6`：可设为 `true`、`false` 或 `auto`。`true` 同时启用内核 IPv6 与 DNS AAAA，适用于 IPv6-only 节点；`auto` 保留订阅中的 IPv6 设置。
+- `CLASH_SUBSCRIPTION_UA`：覆盖拉取订阅时的 User-Agent。默认使用 `clash-verge/v2.4.0`，以便订阅服务返回 Mihomo 支持的 Hysteria2、AnyTLS 等现代协议节点；如果服务商有专用 UA 要求，可在此显式设置。
 
 #### GitHub 下载加速
 
