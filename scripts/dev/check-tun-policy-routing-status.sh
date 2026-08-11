@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+source_clashctl_for_tests() {
+  set -- ""
+  # Source the real functions; suppress the no-arg usage printed by the command dispatcher.
+  source "$PROJECT_DIR/scripts/core/clashctl.sh" >/dev/null
+}
+
+source_clashctl_for_tests
+
+assert_equal() {
+  local name="$1"
+  local expected="$2"
+  local actual="$3"
+
+  if [ "$actual" != "$expected" ]; then
+    echo "not ok - $name: got '$actual', expected '$expected'" >&2
+    return 1
+  fi
+
+  echo "ok - $name"
+}
+
+# Reproduce Issue #303: policy routing sends both direct-looking probes through
+# Tun, so comparing their public IPs alone reports traffic-same-as-host.
+tun_enabled() { printf 'true\n'; }
+runtime_config_tun_enabled() { printf 'true\n'; }
+status_is_running() { return 0; }
+proxy_controller_reachable() { return 0; }
+tun_public_ip_without_proxy_env() { printf '203.0.113.10\n'; }
+tun_public_ip_with_current_route() { printf '203.0.113.10\n'; }
+runtime_config_tun_auto_redirect() { printf 'true\n'; }
+tun_has_policy_routing_evidence() { return 0; }
+tun_log_tun_source_line() { printf '[TCP] 28.0.0.1:1234 --> example.com:443\n'; }
+
+assert_equal \
+  "accepts policy routing with observed Tun traffic" \
+  "ok" \
+  "$(tun_current_effective_result)"
+
+# The same classifier must drive both status commands. Without observed traffic,
+# keep the result explicit instead of presenting a false negative.
+tun_log_tun_source_line() { return 1; }
+assert_equal \
+  "reports policy routing without traffic as likely effective" \
+  "policy-routing-likely-effective" \
+  "$(tun_current_effective_result)"
+assert_equal \
+  "maps likely policy routing to a distinct status" \
+  "likely-effective" \
+  "$(status_tun_effective_status)"
+
+# Reproduce the restart race: verification must happen only after waiting for
+# the controller following service_restart.
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf "$tmp_dir"' EXIT
+events_file="$tmp_dir/events"
+: > "$events_file"
+
+record_event() {
+  printf '%s\n' "$1" >> "$events_file"
+}
+
+guard_sudo_on_user_install() { return 0; }
+prepare() { :; }
+tun_container_mode() { printf 'host\n'; }
+tun_container_risk_reason() { :; }
+can_manage_tun_safely() { return 0; }
+tun_kernel_support_level() { printf 'full\n'; }
+sync_tun_target_state() { return 0; }
+service_restart() { record_event restart; }
+wait_runtime_controller_ready() { record_event wait; return 0; }
+tun_current_effective_result() { record_event verify; printf 'ok\n'; }
+mark_tun_last_action() { :; }
+mark_tun_last_verification() { :; }
+print_tun_on_feedback() { :; }
+
+cmd_tun_on
+assert_equal \
+  "waits for controller before Tun verification" \
+  "restart,wait,verify" \
+  "$(paste -sd, "$events_file")"

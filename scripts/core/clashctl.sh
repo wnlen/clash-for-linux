@@ -621,10 +621,13 @@ status_tun_effective_status() {
     return 0
   fi
 
-  result="$(tun_effective_check 2>/dev/null || true)"
+  result="$(tun_current_effective_result 2>/dev/null || true)"
   case "${result:-unknown}" in
     ok)
       echo "effective"
+      ;;
+    policy-routing-likely-effective)
+      echo "likely-effective"
       ;;
     *)
       echo "ineffective"
@@ -638,6 +641,7 @@ status_tun_effective_text() {
 
   case "$s" in
     effective) echo "🐱 已生效" ;;
+    likely-effective) echo "🟡 很可能已生效" ;;
     *) echo "❗ 未生效" ;;
   esac
 }
@@ -2001,7 +2005,7 @@ print_tun_off_feedback() {
   ui_blank
 }
 
-tun_on_verify_result() {
+tun_resolve_effective_result() {
   local result auto_redirect
 
   result="${1:-unknown}"
@@ -2018,11 +2022,29 @@ tun_on_verify_result() {
 
   auto_redirect="$(runtime_config_tun_auto_redirect 2>/dev/null || echo false)"
   if [ "${auto_redirect:-false}" = "true" ] && tun_has_policy_routing_evidence 2>/dev/null; then
-    echo "policy-routing-likely-effective"
+    if tun_log_tun_source_line >/dev/null 2>&1; then
+      echo "ok"
+    else
+      echo "policy-routing-likely-effective"
+    fi
     return 0
   fi
 
   echo "$result"
+}
+
+tun_current_effective_result() {
+  local result
+
+  result="$(tun_effective_check 2>/dev/null || true)"
+  [ -n "${result:-}" ] || result="unknown"
+  tun_resolve_effective_result "$result"
+}
+
+# Backward-compatible helper retained for callers that already captured the
+# low-level Tun result.
+tun_on_verify_result() {
+  tun_resolve_effective_result "${1:-unknown}"
 }
 
 status_subscription_health_summary() {
@@ -2146,8 +2168,17 @@ status_risk_reason_lines() {
     fi
   fi
 
-  if [ "$tun_enabled" = "true" ] && [ "$tun_effective" != "effective" ]; then
-    echo "• Tun 未生效"
+  if [ "$tun_enabled" = "true" ]; then
+    case "$tun_effective" in
+      effective)
+        ;;
+      likely-effective)
+        echo "• Tun policy routing 已安装，尚未观察到明确 Tun 流量"
+        ;;
+      *)
+        echo "• Tun 未生效"
+        ;;
+    esac
   fi
 
   if [ "$tun_container_mode" = "container-risky" ]; then
@@ -5343,11 +5374,17 @@ cmd_tun_status() {
     echo "🚨 环境检查：当前不满足基础开启条件"
   fi
 
-  if [ "$effective_status" = "effective" ]; then
-    echo "🐱 已生效"
-  else
-    echo "❗ 未生效"
-  fi
+  case "$effective_status" in
+    effective)
+      echo "🐱 已生效"
+      ;;
+    likely-effective)
+      echo "🟡 很可能已生效（已检测到 Tun 与 policy routing，尚未观察到明确 Tun 流量）"
+      ;;
+    *)
+      echo "❗ 未生效"
+      ;;
+  esac
 
   if [ "$enabled" = "true" ]; then
     echo "👉 下一步：clash tun doctor"
@@ -5425,11 +5462,13 @@ cmd_tun_on() {
 
   if status_is_running; then
     service_restart
+    if ! wait_runtime_controller_ready 15; then
+      ui_warn "控制器未在预期时间内就绪，将保留 Tun 开启状态并报告当前验证结果"
+    fi
   fi
 
-  verify_result="$(tun_effective_check 2>/dev/null || true)"
+  verify_result="$(tun_current_effective_result 2>/dev/null || true)"
   [ -n "${verify_result:-}" ] || verify_result="unknown"
-  verify_result="$(tun_on_verify_result "$verify_result")"
 
   case "$verify_result" in
     ok)
@@ -5715,7 +5754,7 @@ doctor_tun_checks() {
 
   echo "【生效验证】"
   if [ "$(tun_enabled 2>/dev/null || echo false)" = "true" ]; then
-    effective_result="$(tun_effective_check 2>/dev/null || true)"
+    effective_result="$(tun_current_effective_result 2>/dev/null || true)"
     primary_reason="$(tun_doctor_primary_reason "$effective_result" "$backend" "$route_takeover")" || {
       rc=$?
       tun_doctor_report_failure "tun_doctor_primary_reason" "$rc" "derive primary reason"
@@ -6476,7 +6515,7 @@ tun_recommendation_lines() {
   fi
 
   if [ "$enabled" = "true" ]; then
-    effective_result="$(tun_effective_check 2>/dev/null || true)"
+    effective_result="$(tun_current_effective_result 2>/dev/null || true)"
     [ -n "${effective_result:-}" ] || effective_result="unknown"
     [ -n "${primary_reason:-}" ] || primary_reason="$(tun_doctor_primary_reason "$effective_result" "$backend" "$route_takeover")"
 
@@ -6625,7 +6664,7 @@ tun_problem_lines() {
   fi
 
   if [ "$enabled" = "true" ]; then
-    effective_result="$(tun_effective_check 2>/dev/null || true)"
+    effective_result="$(tun_current_effective_result 2>/dev/null || true)"
     if [ "$effective_result" != "ok" ]; then
       if tun_has_policy_routing_evidence 2>/dev/null; then
         if tun_log_tun_source_line >/dev/null 2>&1; then
