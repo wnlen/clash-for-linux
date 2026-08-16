@@ -6597,6 +6597,23 @@ tun_recommendation_lines() {
   echo "2. 开启后建议立即执行：clash tun doctor"
 }
 
+tun_doctor_can_manage_tun_safely() {
+  local backend
+
+  tun_device_exists 2>/dev/null || return 1
+  can_manage_tun_safely 2>/dev/null && return 0
+
+  backend="$(runtime_backend 2>/dev/null || echo unknown)"
+  case "$backend" in
+    systemd|systemd-user)
+      tun_process_has_cap_net_admin "$backend" 2>/dev/null
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 tun_problem_lines() {
   local enabled env_type config_tun_enabled auto_route
   local effective_result disable_result route_dev
@@ -6628,7 +6645,7 @@ tun_problem_lines() {
     echo "• 缺少 ip 命令，无法进行完整路由校验"
   fi
 
-  if ! can_manage_tun_safely 2>/dev/null; then
+  if ! tun_doctor_can_manage_tun_safely 2>/dev/null; then
     echo "• 当前环境不满足 Tun 安全开启条件"
   fi
 
