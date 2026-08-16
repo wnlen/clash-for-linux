@@ -5518,26 +5518,39 @@ cmd_tun_off() {
 }
 
 cmd_tun_on_proxy_off() {
-  local system_proxy_rc
+  local system_proxy_rc shell_proxy_rc=0
 
   cmd_tun_on || return $?
 
+  set_shell_proxy_persist_enabled "false" || shell_proxy_rc=$?
+
   if boot_proxy_keep_disable; then
+    system_proxy_rc=0
+  else
+    system_proxy_rc=$?
+  fi
+
+  if [ "$shell_proxy_rc" -eq 0 ] && [ "$system_proxy_rc" -eq 0 ]; then
     ui_blank
     ui_ok "系统代理已关闭，当前使用 Tun 模式接管"
     ui_blank
     return 0
   fi
 
-  system_proxy_rc=$?
-  if [ "$system_proxy_rc" -eq 2 ]; then
-    ui_warn "当前环境不支持清理系统代理持久块，Tun 已按前序结果处理"
-  else
-    ui_warn "系统代理持久块清理失败，Tun 已按前序结果处理"
+  if [ "$shell_proxy_rc" -ne 0 ]; then
+    ui_warn "Shell 代理自动恢复关闭失败，Tun 已按前序结果处理"
+  fi
+  if [ "$system_proxy_rc" -ne 0 ]; then
+    if [ "$system_proxy_rc" -eq 2 ]; then
+      ui_warn "当前环境不支持清理系统代理持久块，Tun 已按前序结果处理"
+    else
+      ui_warn "系统代理持久块清理失败，Tun 已按前序结果处理"
+    fi
   fi
   ui_next "clash doctor"
   ui_blank
-  return "$system_proxy_rc"
+  [ "$system_proxy_rc" -ne 0 ] && return "$system_proxy_rc"
+  return "$shell_proxy_rc"
 }
 
 cmd_tun_off_proxy_on() {
