@@ -2006,7 +2006,7 @@ print_tun_off_feedback() {
 }
 
 tun_resolve_effective_result() {
-  local result auto_redirect
+  local result auto_route
 
   result="${1:-unknown}"
   case "$result" in
@@ -2020,8 +2020,8 @@ tun_resolve_effective_result() {
       ;;
   esac
 
-  auto_redirect="$(runtime_config_tun_auto_redirect 2>/dev/null || echo false)"
-  if [ "${auto_redirect:-false}" = "true" ] && tun_has_policy_routing_evidence 2>/dev/null; then
+  auto_route="$(runtime_config_tun_auto_route 2>/dev/null || echo false)"
+  if [ "${auto_route:-false}" = "true" ] && tun_has_policy_routing_evidence 2>/dev/null; then
     if tun_log_tun_source_line >/dev/null 2>&1; then
       echo "ok"
     else
