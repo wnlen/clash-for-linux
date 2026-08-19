@@ -621,6 +621,19 @@ status_tun_effective_status() {
     return 0
   fi
 
+  if [ "$(runtime_config_tun_enabled 2>/dev/null || echo false)" = "true" ] \
+    && status_is_running 2>/dev/null \
+    && proxy_controller_reachable 2>/dev/null \
+    && [ "$(runtime_config_tun_auto_route 2>/dev/null || echo false)" = "true" ] \
+    && tun_has_policy_routing_evidence 2>/dev/null; then
+    if tun_log_tun_source_line >/dev/null 2>&1; then
+      echo "effective"
+    else
+      echo "likely-effective"
+    fi
+    return 0
+  fi
+
   result="$(tun_current_effective_result 2>/dev/null || true)"
   case "${result:-unknown}" in
     ok)
@@ -1032,9 +1045,11 @@ system_state_connectivity_text() {
 }
 
 system_state_risk_text() {
-  load_system_state
+  local risk_level
 
-  case "$RISK_LEVEL" in
+  risk_level="$(system_state_risk_level)"
+
+  case "$risk_level" in
     low) echo "🐱 低" ;;
     medium) echo "🟡 中" ;;
     high) echo "🟠 高" ;;
@@ -5958,6 +5973,7 @@ tun_log_tun_adapter_cidrs() {
 
 tun_ipv4_to_int() {
   local ip="$1"
+  local output_var="$2"
   local a b c d octet n value
 
   IFS=. read -r a b c d <<EOF
@@ -5979,7 +5995,7 @@ EOF
     value=$(((value << 8) + n))
   done
 
-  printf '%s\n' "$value"
+  printf -v "$output_var" '%s' "$value"
 }
 
 tun_ipv4_in_cidr() {
@@ -5999,8 +6015,8 @@ tun_ipv4_in_cidr() {
   prefix=$((10#$prefix))
   [ "$prefix" -ge 0 ] && [ "$prefix" -le 32 ] || return 1
 
-  ip_value="$(tun_ipv4_to_int "$ip" 2>/dev/null)" || return 1
-  base_value="$(tun_ipv4_to_int "$base" 2>/dev/null)" || return 1
+  tun_ipv4_to_int "$ip" ip_value || return 1
+  tun_ipv4_to_int "$base" base_value || return 1
 
   if [ "$prefix" -eq 0 ]; then
     mask=0
@@ -6042,14 +6058,10 @@ EOF
   return 1
 }
 
-tun_log_line_source_ip() {
-  sed -nE 's/.*(^|[^0-9])(([0-9]{1,3}\.){3}[0-9]{1,3}):[0-9]+.*-->.*/\2/p' \
-    | tail -n 1
-}
-
 tun_log_tun_source_line() {
   local log_file="$LOG_DIR/mihomo.out.log"
-  local adapter_cidrs line source_ip matched_line
+  local adapter_cidrs line source_ip
+  local source_pattern='(^|[^0-9])(([0-9]{1,3}\.){3}[0-9]{1,3}):[0-9]+.*-->'
 
   [ -f "$log_file" ] || return 1
   adapter_cidrs="$(tun_log_tun_adapter_cidrs 2>/dev/null || true)"
@@ -6060,16 +6072,19 @@ tun_log_tun_source_line() {
       *) continue ;;
     esac
 
-    source_ip="$(printf '%s\n' "$line" | tun_log_line_source_ip 2>/dev/null || true)"
-    [ -n "${source_ip:-}" ] || continue
+    if [[ "$line" =~ $source_pattern ]]; then
+      source_ip="${BASH_REMATCH[2]}"
+    else
+      continue
+    fi
 
     if tun_log_source_ip_is_tun "$source_ip" "$adapter_cidrs"; then
-      matched_line="$line"
+      printf '%s\n' "$line"
+      return 0
     fi
-  done < "$log_file"
+  done < <(tac "$log_file")
 
-  [ -n "${matched_line:-}" ] || return 1
-  printf '%s\n' "$matched_line"
+  return 1
 }
 
 tun_log_has_tun_traffic_evidence() {

@@ -45,6 +45,13 @@ assert_equal \
   "accepts auto-route policy routing when auto-redirect is disabled" \
   "ok" \
   "$(tun_current_effective_result)"
+assert_equal \
+  "status uses local policy routing evidence without a public IP probe" \
+  "effective" \
+  "$(
+    tun_current_effective_result() { printf 'unexpected-public-ip-probe\n'; }
+    status_tun_effective_status
+  )"
 
 # The same classifier must drive both status commands. Without observed traffic,
 # keep the result explicit instead of presenting a false negative.

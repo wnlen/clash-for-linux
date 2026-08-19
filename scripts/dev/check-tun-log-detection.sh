@@ -71,3 +71,18 @@ run_case \
   "[TUN] Tun adapter listening at: Meta([198.18.0.1/30],[])" \
   "[TCP] 10.0.0.2:43820 --> example.com:443 match RuleSet" \
   "fail"
+
+older_line="[TCP] 198.18.0.2:43820 --> older.example.com:443 match RuleSet"
+newer_line="[TCP] 198.18.0.2:43821 --> newer.example.com:443 match RuleSet"
+printf '%s\n%s\n%s\n' \
+  "[TUN] Tun adapter listening at: Meta([198.18.0.1/30],[])" \
+  "$older_line" \
+  "$newer_line" > "$LOG_DIR/mihomo.out.log"
+
+actual_line="$(tun_log_tun_source_line)"
+if [ "$actual_line" != "$newer_line" ]; then
+  echo "not ok - returns latest tun traffic: got '$actual_line'" >&2
+  exit 1
+fi
+
+echo "ok - returns latest tun traffic"
