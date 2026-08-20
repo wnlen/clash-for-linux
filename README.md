@@ -677,7 +677,7 @@ chmod +x /etc/rc.local
 3. 程序日志中出现`error: unsupported rule type RULE-SET`报错，解决方法查看官方[WIKI](https://github.com/Dreamacro/clash/wiki/FAQ#error-unsupported-rule-type-rule-set)
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=wnlen/clash-for-linux&type=Date)](https://star-history.com/#wnlen/clash-for-linux&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=wnlen/clash-for-linux)](https://star-history.dera.page/#wnlen/clash-for-linux)
 
 ## ⚠️ 特别声明
 
