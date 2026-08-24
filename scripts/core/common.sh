@@ -1926,7 +1926,7 @@ runtime_config_allow_lan() {
   file="$(runtime_config_file)"
   [ -s "$file" ] || return 1
 
-  value="$("$(yq_bin)" eval '.["allow-lan"] // true' "$file" 2>/dev/null | head -n 1)"
+  value="$("$(yq_bin)" eval '.["allow-lan"]' "$file" 2>/dev/null | head -n 1)"
   case "$value" in
     false) echo "false" ;;
     *) echo "true" ;;

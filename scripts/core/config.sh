@@ -424,7 +424,7 @@ config_allow_lan() {
   local value
 
   ensure_config_files
-  value="$("$(yq_bin)" eval '.["allow-lan"] // true' "$file" 2>/dev/null | head -n 1)"
+  value="$("$(yq_bin)" eval '.["allow-lan"]' "$file" 2>/dev/null | head -n 1)"
   case "$value" in
     false) echo "false" ;;
     *) echo "true" ;;

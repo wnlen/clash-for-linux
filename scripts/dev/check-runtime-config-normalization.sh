@@ -76,13 +76,28 @@ resolve_runtime_ports() {
 
 ensure_controller_secret() { printf 'test-secret\n'; }
 runtime_dashboard_dir() { printf '%s/dashboard\n' "$RUNTIME_DIR"; }
-config_allow_lan() { printf 'true\n'; }
 tun_enabled() { printf 'false\n'; }
 tun_stack() { printf 'mixed\n'; }
 tun_auto_route() { printf 'false\n'; }
 tun_auto_redirect() { printf 'false\n'; }
 tun_strict_route() { printf 'false\n'; }
 tun_dns_hijack() { printf 'any:53\n'; }
+
+set_config_allow_lan false
+
+actual="$("$BIN_DIR/yq" eval '.["allow-lan"]' "$CONFIG_DIR/template.yaml")"
+if [ "$actual" != "false" ]; then
+  echo "not ok - writes disabled LAN setting: got '$actual', expected 'false'" >&2
+  exit 1
+fi
+echo "ok - writes disabled LAN setting"
+
+actual="$(config_allow_lan)"
+if [ "$actual" != "false" ]; then
+  echo "not ok - reads disabled LAN setting: got '$actual', expected 'false'" >&2
+  exit 1
+fi
+echo "ok - reads disabled LAN setting"
 
 sample_config="$tmp_dir/runtime-config.yaml"
 cat > "$sample_config" <<'YAML'
@@ -141,6 +156,16 @@ assert_yq "removes legacy socks-port" 'has("socks-port")' "false"
 assert_yq "removes legacy redir-port" 'has("redir-port")' "false"
 assert_yq "removes legacy tproxy-port" 'has("tproxy-port")' "false"
 assert_yq "keeps controller normalization" '.["external-controller"]' "0.0.0.0:9090"
+assert_yq "keeps LAN proxy disabled" '.["allow-lan"]' "false"
+
+cp "$sample_config" "$RUNTIME_DIR/config.yaml"
+actual="$(runtime_config_allow_lan)"
+if [ "$actual" != "false" ]; then
+  echo "not ok - reports disabled runtime LAN status: got '$actual', expected 'false'" >&2
+  exit 1
+fi
+echo "ok - reports disabled runtime LAN status"
+
 assert_yq "preserves subscription IPv6" '.ipv6' "true"
 assert_yq "preserves subscription DNS IPv6" '.dns.ipv6' "true"
 assert_yq "preserves Hysteria2 proxy type" '.proxies[0].type' "hysteria2"
