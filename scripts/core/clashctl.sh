@@ -1423,7 +1423,7 @@ print_add_feedback() {
   local url="${2:-}"
 
   echo "✔ 已添加订阅并设为当前主订阅：$name"
-  [ -n "${url:-}" ] && echo "📡 URL：$url"
+  [ -n "${url:-}" ] && echo "📡 URL：$(subscription_url_for_display "$url")"
   echo "📋 最新订阅列表（clash ls）："
 }
 

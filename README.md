@@ -206,6 +206,16 @@ clash sub remove <名称>
 
 WSL / 普通用户如果无权写入 `/etc/environment`，`clashon` 会自动降级：运行时照常启动，当前 Shell 代理变量生效；系统代理持久接管和开机代理保持不可用。
 
+### 直接分享链接
+
+`clash add` 可以直接导入 `vmess://`、`vless://`、`trojan://`、`tuic://`、`hysteria2://`、`hy2://` 和 `anytls://` 分享链接：
+
+```bash
+clash add "vless://..." jp
+```
+
+分享链接通常包含 `&` 等 Shell 特殊字符，请始终使用引号包住完整链接。链接中的凭据会保存在本机订阅配置中，但命令反馈只显示脱敏后的协议类型。
+
 ### 本地配置导入
 
 推荐使用交互导入，放置目录为：`$PROJECT_DIR/runtime/subscriptions/`
