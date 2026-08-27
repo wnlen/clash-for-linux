@@ -190,6 +190,8 @@ OpenWrt 下 root/system 安装会把 `clash`、`clashon`、`clashoff` 等命令�
 
 ### 多订阅管理
 
+订阅地址包含 `&` 等 Shell 特殊字符时，请用引号包裹完整地址；也可以直接运行 `clash add`，按提示交互式粘贴地址。例如：`clash add 'https://example.com/sub?target=clash&emoji=true' west`。
+
 ```
 clash add <订阅链接> <名称>
 clash use
@@ -337,6 +339,8 @@ Control 层负责把常用动作收口成可理解的命令和反馈。
 KERNEL_TYPE=mihomo
 MIXED_PORT=7890
 EXTERNAL_CONTROLLER=0.0.0.0:9090
+CLASH_DNS_PORT=1053
+CLASH_PRESERVE_DNS_LISTEN=false
 CLASH_CONTROLLER_SECRET=your-secret
 CLASH_SUBSCRIPTION_URL=https://example.com/sub
 MIHOMO_VERSION=v1.19.23
@@ -355,6 +359,7 @@ CLASH_IPV6=auto
 按需设置即可，不需要每项都写。
 
 - `CLASH_SHELL_AUTO_RESTORE_PROXY`：控制登录 Shell 是否自动恢复上次 `clashon` 写入的代理变量。默认 `true` 保持兼容；如果不希望 SSH 远程登录后自动带上 `http_proxy` / `https_proxy`，设为 `false`，之后仍可手动执行 `clashon`。
+- `CLASH_PRESERVE_DNS_LISTEN`：设为 `true` 时保留活动订阅中的 `.dns.listen`，不再用 `CLASH_DNS_PORT` 覆盖，也不会因端口占用自动换成其他 DNS 端口；如果订阅没有有效的 `.dns.listen`，仍回退到 `CLASH_DNS_PORT`。请先确认保留的端口未被其他服务占用。
 - `CLASH_PREDOWNLOAD_GEO`：控制安装期是否预下载 GEO 数据。默认 `true`，会提前下载 `Country.mmdb`、`geoip.metadb`、`GeoIP.dat`、`GeoSite.dat` 等规则分流常用资源；临时部署、只想先跑起来时可设为 `false` 跳过安装期预下载。注意：当最终运行配置实际使用 `GEOIP` 规则时，启动前仍会按需准备 `Country.mmdb`，否则 Mihomo 无法可靠加载该配置。
 - `CLASH_IPV6`：可设为 `true`、`false` 或 `auto`。`true` 同时启用内核 IPv6 与 DNS AAAA，适用于 IPv6-only 节点；`auto` 保留订阅中的 IPv6 设置。
 - `CLASH_SUBSCRIPTION_UA`：覆盖拉取订阅时的 User-Agent。默认使用 `clash-verge/v2.4.0`，以便订阅服务返回 Mihomo 支持的 Hysteria2、AnyTLS 等现代协议节点；如果服务商有专用 UA 要求，可在此显式设置。

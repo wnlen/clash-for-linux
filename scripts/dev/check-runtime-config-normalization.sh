@@ -68,6 +68,39 @@ source "$PROJECT_DIR/scripts/core/config.sh"
 # Keep this regression test independent from the developer's project .env.
 read_env_value() { return 1; }
 
+# Keep port resolution deterministic for this test; the preservation path must
+# not depend on whatever happens to be listening on the developer's machine.
+is_port_in_use() { return 1; }
+port_reserved_by_current_runtime() { return 1; }
+
+preserved_port_config="$tmp_dir/preserved-dns-port-config.yaml"
+cat > "$preserved_port_config" <<'YAML'
+mixed-port: 7890
+external-controller: 0.0.0.0:9090
+dns:
+  listen: 127.0.0.1:7874
+proxies: []
+proxy-groups: []
+rules: []
+YAML
+
+unset MIXED_PORT EXTERNAL_CONTROLLER CLASH_DNS_PORT CLASH_PRESERVE_DNS_LISTEN
+default_port_resolution="$(resolve_runtime_ports "$preserved_port_config")"
+if printf '%s\n' "$default_port_resolution" | grep -qx 'CLASH_DNS_PORT_RESOLVED=1053'; then
+  echo "ok - default DNS port remains configurable"
+else
+  echo "not ok - default DNS port resolution changed unexpectedly: $default_port_resolution" >&2
+  exit 1
+fi
+
+preserved_port_resolution="$(CLASH_PRESERVE_DNS_LISTEN=true resolve_runtime_ports "$preserved_port_config")"
+if printf '%s\n' "$preserved_port_resolution" | grep -qx 'CLASH_DNS_PORT_RESOLVED=7874'; then
+  echo "ok - preserves subscription DNS port during resolution"
+else
+  echo "not ok - subscription DNS port was not preserved: $preserved_port_resolution" >&2
+  exit 1
+fi
+
 resolve_runtime_ports() {
   printf 'MIXED_PORT_RESOLVED=7891\n'
   printf 'EXTERNAL_CONTROLLER_RESOLVED=0.0.0.0:9090\n'
@@ -111,6 +144,7 @@ secret: old-secret
 allow-lan: false
 ipv6: true
 dns:
+  listen: 127.0.0.1:7874
   ipv6: true
 proxies:
   - name: hy2-ipv6
@@ -127,6 +161,9 @@ proxies:
 proxy-groups: []
 rules: []
 YAML
+
+preserved_normalization_config="$tmp_dir/preserved-dns-normalization.yaml"
+cp "$sample_config" "$preserved_normalization_config"
 
 normalize_runtime_config "$sample_config"
 
@@ -168,10 +205,15 @@ echo "ok - reports disabled runtime LAN status"
 
 assert_yq "preserves subscription IPv6" '.ipv6' "true"
 assert_yq "preserves subscription DNS IPv6" '.dns.ipv6' "true"
+assert_yq "normalizes DNS listen by default" '.dns.listen' "0.0.0.0:1053"
 assert_yq "preserves Hysteria2 proxy type" '.proxies[0].type' "hysteria2"
 assert_yq "preserves IPv6-only proxy server" '.proxies[0].server' "2001:db8::1"
 assert_yq "preserves AnyTLS proxy type" '.proxies[1].type' "anytls"
 assert_yq "preserves AnyTLS SNI" '.proxies[1].sni' "example.com"
+
+CLASH_PRESERVE_DNS_LISTEN=true normalize_runtime_config "$preserved_normalization_config"
+assert_file_yq "preserves subscription DNS listen when enabled" "$preserved_normalization_config" '.dns.listen' "127.0.0.1:7874"
+unset CLASH_PRESERVE_DNS_LISTEN
 
 CLASH_IPV6=false normalize_runtime_config "$sample_config"
 assert_yq "IPv6 off disables kernel IPv6" '.ipv6' "false"
