@@ -265,7 +265,7 @@ cd clash-for-linux
 
 ```bash
 opkg update
-opkg install bash curl tar gzip coreutils-readlink unzip
+opkg install bash curl tar gzip coreutils-readlink coreutils-install coreutils-nohup unzip
 ```
 
 安装与手动管理：

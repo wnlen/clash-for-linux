@@ -1209,7 +1209,7 @@ is_openwrt() {
 }
 
 openwrt_dependency_hint() {
-  echo "opkg update && opkg install bash curl tar gzip coreutils-readlink unzip"
+  echo "opkg update && opkg install bash curl tar gzip coreutils-readlink coreutils-install coreutils-nohup unzip"
 }
 
 openwrt_project_dir_is_persistent() {
@@ -1240,7 +1240,7 @@ ensure_openwrt_install_supported() {
       ;;
   esac
 
-  for command_name in bash curl tar gzip readlink unzip; do
+  for command_name in bash curl tar gzip readlink install nohup unzip; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
       missing="${missing}${missing:+ }$command_name"
     fi
