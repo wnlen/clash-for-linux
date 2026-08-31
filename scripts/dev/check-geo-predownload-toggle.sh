@@ -59,4 +59,18 @@ assert_download_count "explicit false skips install-time GEO predownload" 0
 
 : > "$download_log"
 CLASH_PREDOWNLOAD_GEO=true resolve_geo_assets
-assert_download_count "explicit true predownloads GEO assets" 5
+assert_download_count "existing GEO assets are reused" 0
+
+rm -f "$RUNTIME_DIR/GeoSite.dat"
+: > "$download_log"
+CLASH_PREDOWNLOAD_GEO=true resolve_geo_assets
+assert_download_count "only missing GEO assets are downloaded" 1
+
+: > "$RUNTIME_DIR/GeoSite.dat"
+: > "$download_log"
+CLASH_PREDOWNLOAD_GEO=true resolve_geo_assets
+assert_download_count "empty GEO assets are replaced" 1
+
+: > "$download_log"
+CLASH_OFFLINE=true CLASH_PREDOWNLOAD_GEO=true resolve_geo_assets
+assert_download_count "offline install reuses existing GEO assets" 0

@@ -274,6 +274,11 @@ resolve_geo_assets() {
     file="$(basename "$path")"
     target="$RUNTIME_DIR/$file"
 
+    if [ -s "$target" ]; then
+      info "复用已有 GEO 资源：$file"
+      continue
+    fi
+
     if ! copy_bundled_asset "geo" "latest" "$file" "$target" "$file"; then
       download_file "$url" "$target" "$file"
     fi
