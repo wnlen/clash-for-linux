@@ -651,26 +651,70 @@ download_candidate_fetch() {
     "$url"
 }
 
-subscription_fake_progress_bar() {
+subscription_download_wait_status() {
   local pid="$1"
-  local width=72
-  local percent=3
-  local filled bar
+  local started_at elapsed
+
+  started_at="${SECONDS:-0}"
+
+  if [ ! -t 2 ]; then
+    printf '⏳ 正在下载订阅…（Ctrl+C 可跳过）\n' >&2
+    while kill -0 "$pid" 2>/dev/null; do
+      sleep 1
+    done
+    return 0
+  fi
 
   while kill -0 "$pid" 2>/dev/null; do
-    percent=$((percent + 5))
-    [ "$percent" -gt 94 ] && percent=94
-
-    filled=$((percent * width / 100))
-    bar="$(printf '%*s' "$filled" '' | tr ' ' '#')"
-
-    printf '\r%-72s %3d.0%%' "$bar" "$percent"
-    sleep 0.2
+    elapsed=$((${SECONDS:-0} - started_at))
+    printf '\r\033[K⏳ 正在下载订阅… 已等待 %s 秒（Ctrl+C 可跳过）' "$elapsed" >&2
+    sleep 1
   done
+
+  ui_progress_clear
 }
 
-subscription_fake_progress_done() {
+subscription_download_done() {
   printf '\r######################################################################## 100.0%%\n'
+}
+
+subscription_download_failure_reason() {
+  case "$1" in
+    5|6) echo "域名解析失败" ;;
+    7) echo "无法连接订阅服务器" ;;
+    22) echo "订阅服务器返回 HTTP 错误" ;;
+    28) echo "连接超时" ;;
+    35) echo "TLS 握手失败" ;;
+    52) echo "订阅服务器未返回数据" ;;
+    56) echo "连接被中断" ;;
+    60) echo "证书验证失败" ;;
+    *) echo "网络请求失败" ;;
+  esac
+}
+
+subscription_download_failed_or_cancelled() {
+  case "${SUBSCRIPTION_DOWNLOAD_LAST_STATUS:-}" in
+    failed|cancelled) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+print_subscription_download_failure() {
+  local reason="$1"
+
+  if [ "${CLASH_INSTALL_ALLOW_SUBSCRIPTION_SKIP:-false}" = "true" ]; then
+    printf '⚠ 订阅下载失败：%s；已跳过，请稍后执行 clash sub update\n' "$reason" >&2
+  else
+    printf '❌ 订阅下载失败：%s，请检查网络或稍后重试\n' "$reason" >&2
+  fi
+}
+
+print_subscription_download_cancelled() {
+  if [ "${CLASH_INSTALL_ALLOW_SUBSCRIPTION_SKIP:-false}" = "true" ]; then
+    printf '⚠ 已取消订阅下载；安装继续，请稍后执行 clash sub update\n' >&2
+  else
+    printf '⚠ 已取消订阅下载\n' >&2
+  fi
 }
 
 download_subscription_fetch_quiet() {
@@ -694,32 +738,69 @@ download_subscription_fetch_quiet() {
 download_subscription_file() {
   local url="$1"
   local out="$2"
-  local fetch_tmp pid rc
+  local fetch_tmp error_file pid rc reason error_detail
+  local cancelled="false"
+  local previous_int_trap
+
+  SUBSCRIPTION_DOWNLOAD_LAST_STATUS=""
+  SUBSCRIPTION_DOWNLOAD_LAST_ERROR_SUMMARY=""
+  SUBSCRIPTION_DOWNLOAD_LAST_ERROR_DETAIL=""
 
   mkdir -p "$(dirname "$out")"
   rm -f "$out" 2>/dev/null || true
 
   fetch_tmp="$(mktemp)"
+  error_file="$(mktemp)"
   rm -f "$fetch_tmp" 2>/dev/null || true
 
-  ui_download "正在下载：subscription"
-
-  download_subscription_fetch_quiet "$url" "$fetch_tmp" &
+  download_subscription_fetch_quiet "$url" "$fetch_tmp" 2>"$error_file" &
   pid="$!"
 
-  subscription_fake_progress_bar "$pid"
+  previous_int_trap="$(trap -p INT || true)"
+  trap 'cancelled="true"; kill "$pid" 2>/dev/null || true' INT
 
-  wait "$pid"
-  rc="$?"
+  subscription_download_wait_status "$pid" || true
+
+  if wait "$pid"; then
+    rc="0"
+  else
+    rc="$?"
+  fi
+
+  if [ -n "${previous_int_trap:-}" ]; then
+    eval "$previous_int_trap"
+  else
+    trap - INT
+  fi
+
+  if [ "$cancelled" = "true" ]; then
+    rc="130"
+  fi
 
   if [ "$rc" -eq 0 ]; then
-    subscription_fake_progress_done
+    SUBSCRIPTION_DOWNLOAD_LAST_STATUS="success"
+    subscription_download_done
     mv -f "$fetch_tmp" "$out"
+    rm -f "$error_file" 2>/dev/null || true
     return 0
   fi
 
-  printf '\n'
-  rm -f "$fetch_tmp" 2>/dev/null || true
+  error_detail="$(tr '\r\n' '  ' < "$error_file" | sed 's/[[:space:]][[:space:]]*/ /g; s/^[[:space:]]*//; s/[[:space:]]*$//' || true)"
+  rm -f "$fetch_tmp" "$error_file" 2>/dev/null || true
+
+  if [ "$cancelled" = "true" ]; then
+    SUBSCRIPTION_DOWNLOAD_LAST_STATUS="cancelled"
+    SUBSCRIPTION_DOWNLOAD_LAST_ERROR_SUMMARY="订阅下载已取消"
+    SUBSCRIPTION_DOWNLOAD_LAST_ERROR_DETAIL="用户取消了订阅下载"
+    print_subscription_download_cancelled
+    return 130
+  fi
+
+  reason="$(subscription_download_failure_reason "$rc")"
+  SUBSCRIPTION_DOWNLOAD_LAST_STATUS="failed"
+  SUBSCRIPTION_DOWNLOAD_LAST_ERROR_SUMMARY="订阅下载失败：$reason"
+  SUBSCRIPTION_DOWNLOAD_LAST_ERROR_DETAIL="curl exit code: $rc${error_detail:+; $error_detail}"
+  print_subscription_download_failure "$reason"
   return "$rc"
 }
 
@@ -1064,11 +1145,20 @@ fail_build_with_detail() {
 
   if [ "$stage" = "fetch-source" ] && [ -n "${SUBCONVERTER_LAST_ERROR_DETAIL:-}" ]; then
     record_detail="$SUBCONVERTER_LAST_ERROR_DETAIL"
+  elif [ "$stage" = "fetch-source" ] && [ -n "${SUBSCRIPTION_DOWNLOAD_LAST_ERROR_DETAIL:-}" ]; then
+    record_detail="$SUBSCRIPTION_DOWNLOAD_LAST_ERROR_DETAIL"
   fi
 
   record_build_error_detail "$stage" "$record_detail"
   record_build_failure "$mode" "$policy" "$active" "$selected" "$included" "$failed"
   mark_runtime_build_not_applied "$stage"
+
+  # The downloader already emitted one concise cause. Return without printing a
+  # second multi-line build error so callers can decide whether to retry or skip.
+  if [ "$stage" = "fetch-source" ] && [ -n "${SUBSCRIPTION_DOWNLOAD_LAST_ERROR_SUMMARY:-}" ]; then
+    return 1
+  fi
+
   die "$detail"
 }
 
@@ -3967,6 +4057,9 @@ fetch_subscription_source() {
   SUBCONVERTER_LAST_ERROR_DETAIL=""
   SUBCONVERTER_LAST_ERROR_SUMMARY=""
   SUBCONVERTER_LAST_ZERO_NODES="false"
+  SUBSCRIPTION_DOWNLOAD_LAST_STATUS=""
+  SUBSCRIPTION_DOWNLOAD_LAST_ERROR_SUMMARY=""
+  SUBSCRIPTION_DOWNLOAD_LAST_ERROR_DETAIL=""
 
   if [ -z "${url:-}" ]; then
     mark_subscription_health_failure "$name" "订阅源地址为空"
@@ -4044,7 +4137,7 @@ fetch_subscription_source() {
           fi
         fi
       else
-        reason="订阅下载失败"
+        reason="${SUBSCRIPTION_DOWNLOAD_LAST_ERROR_SUMMARY:-订阅下载失败}"
       fi
       ;;
     convert)
@@ -4138,6 +4231,8 @@ generate_config() {
       if [ -n "${SUBCONVERTER_LAST_ERROR_SUMMARY:-}" ]; then
         write_compile_error "当前主订阅不可用：$active_source"
         append_compile_error "reason : $SUBCONVERTER_LAST_ERROR_SUMMARY"
+      elif [ -n "${SUBSCRIPTION_DOWNLOAD_LAST_ERROR_SUMMARY:-}" ]; then
+        write_compile_error "$SUBSCRIPTION_DOWNLOAD_LAST_ERROR_SUMMARY"
       else
         write_compile_error "当前主订阅不可用"
         append_compile_error "source : $active_source"
@@ -4152,6 +4247,7 @@ generate_config() {
       "$included_csv" \
       "$failed_csv" \
       "当前主订阅不可用：$active_source"
+    return 1
   fi
 
   included_csv="$active_source"

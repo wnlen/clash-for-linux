@@ -57,12 +57,24 @@ ensure_subscription_bootstrap_for_install "default"
 prompt_subscription_if_needed
 
 if [ -n "$(subscription_url 2>/dev/null || true)" ]; then
-  if generate_config; then
+  if CLASH_INSTALL_ALLOW_SUBSCRIPTION_SKIP=true generate_config; then
     if [ -n "${INSTALL_PENDING_SUBSCRIPTION_URL:-}" ]; then
       write_env_value "CLASH_SUBSCRIPTION_URL" "$INSTALL_PENDING_SUBSCRIPTION_URL"
     fi
     echo "✨ 订阅已生效"
     post_install_verify
+  elif subscription_download_failed_or_cancelled; then
+    if clash_command_available; then
+      write_runtime_value "INSTALL_VERIFY_COMMAND_READY" "true"
+    else
+      write_runtime_value "INSTALL_VERIFY_COMMAND_READY" "false"
+      die "clash 管理命令安装失败，命令不可用"
+    fi
+
+    write_runtime_value "INSTALL_VERIFY_CONFIG_READY" "false"
+    write_runtime_value "INSTALL_VERIFY_RUNTIME_READY" "false"
+    write_runtime_value "INSTALL_VERIFY_CONTROLLER_READY" "false"
+    write_runtime_event_value "RUNTIME_LAST_INSTALL_READY" "false"
   else
     write_runtime_value "INSTALL_VERIFY_CONFIG_READY" "false"
     write_runtime_value "INSTALL_VERIFY_RUNTIME_READY" "false"
