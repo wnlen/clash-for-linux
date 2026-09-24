@@ -458,24 +458,60 @@ subscription_url_scheme() {
   local url="$1"
 
   case "$url" in
-    http://*)  echo "http" ;;
-    https://*) echo "https" ;;
-    file://*)  echo "file" ;;
-    *)         echo "unknown" ;;
+    http://*)       echo "http" ;;
+    https://*)      echo "https" ;;
+    file://*)       echo "file" ;;
+    vmess://*)      echo "vmess" ;;
+    vless://*)      echo "vless" ;;
+    trojan://*)     echo "trojan" ;;
+    tuic://*)       echo "tuic" ;;
+    hysteria2://*)  echo "hysteria2" ;;
+    hy2://*)        echo "hy2" ;;
+    anytls://*)     echo "anytls" ;;
+    *)              echo "unknown" ;;
   esac
 }
 
-subscription_url_is_supported() {
-  local url="$1"
-
-  case "$(subscription_url_scheme "$url")" in
-    http|https|file)
+subscription_scheme_is_share_link() {
+  case "$1" in
+    vmess|vless|trojan|tuic|hysteria2|hy2|anytls)
       return 0
       ;;
     *)
       return 1
       ;;
   esac
+}
+
+subscription_url_is_share_link() {
+  subscription_scheme_is_share_link "$(subscription_url_scheme "$1")"
+}
+
+subscription_url_is_supported() {
+  local url="$1" scheme
+
+  scheme="$(subscription_url_scheme "$url")"
+
+  case "$scheme" in
+    http|https|file)
+      return 0
+      ;;
+    *)
+      subscription_scheme_is_share_link "$scheme"
+      ;;
+  esac
+}
+
+subscription_url_for_display() {
+  local url="$1" scheme
+
+  scheme="$(subscription_url_scheme "$url")"
+  if subscription_scheme_is_share_link "$scheme"; then
+    printf '%s://<redacted>\n' "$scheme"
+    return 0
+  fi
+
+  printf '%s\n' "$url"
 }
 
 subscription_file_path_from_url() {
@@ -801,20 +837,22 @@ subscription_cache_store() {
   local fmt="${2:-clash}"
   local src="$3"
   local source_url="${4:-}"
-  local cache_file meta_file
+  local cache_file meta_file display_url display_source_url
 
   [ -s "$src" ] || return 0
 
   cache_file="$(subscription_cache_file "$url" "$fmt")"
   meta_file="$(subscription_cache_meta_file "$url" "$fmt")"
+  display_url="$(subscription_url_for_display "$url")"
+  display_source_url="$(subscription_url_for_display "$source_url")"
 
   mkdir -p "$(download_cache_dir)"
   cp -f "$src" "$cache_file"
 
   cat > "$meta_file" <<EOF
-CACHE_URL="$url"
+CACHE_URL="$display_url"
 CACHE_FORMAT="$fmt"
-CACHE_SOURCE_URL="$source_url"
+CACHE_SOURCE_URL="$display_source_url"
 CACHE_TIME="$(now_datetime)"
 EOF
 }
@@ -1242,6 +1280,7 @@ print_subscription_health_one() {
 
   type_text="$(subscription_format_by_name "$name" 2>/dev/null || echo "clash")"
   url_text="$(subscription_url_by_name "$name" 2>/dev/null || true)"
+  url_text="$(subscription_url_for_display "$url_text")"
 
   echo "📡 订阅名称：$name"
   echo "🔧 订阅类型：$type_text"
@@ -1269,6 +1308,7 @@ print_subscription_health_verbose() {
     enabled="$("$(yq_bin)" eval ".sources.${name}.enabled // false" "$file" 2>/dev/null)"
     fmt="$("$(yq_bin)" eval ".sources.${name}.type // \"clash\"" "$file" 2>/dev/null)"
     url="$("$(yq_bin)" eval ".sources.${name}.url // \"\"" "$file" 2>/dev/null)"
+    url="$(subscription_url_for_display "$url")"
 
     if [ "$name" = "$active" ]; then
       echo "* $name"
@@ -2372,6 +2412,7 @@ show_subscription() {
 
   url="$(subscription_url 2>/dev/null || true)"
   fmt="$(subscription_format)"
+  url="$(subscription_url_for_display "$url")"
 
   if [ -n "${url:-}" ]; then
     echo "订阅地址：$url"
@@ -2997,6 +3038,7 @@ print_subscription_pick_line() {
 
   type_text="$(subscription_format_by_name "$name" 2>/dev/null || echo "clash")"
   url_text="$(subscription_url_by_name "$name" 2>/dev/null || true)"
+  url_text="$(subscription_url_for_display "$url_text")"
   [ -n "${url_text:-}" ] || url_text="-"
 
   if [ "$show_index" = "true" ]; then
@@ -3102,6 +3144,11 @@ subscription_list_recommendation_lines() {
 
 detect_subscription_format() {
   local url="$1"
+
+  if subscription_url_is_share_link "$url"; then
+    echo "convert"
+    return 0
+  fi
 
   case "$url" in
     *.yaml|*.yml|*".yaml?"*|*".yml?"*)
@@ -3542,7 +3589,7 @@ convert_subscription_via_subconverter() {
   local api tmp_file curl_error_file
   local curl_meta curl_rc http_code effective_url errexit_was_set
   local log_file
-  local scheme convert_url subscription_ua
+  local scheme convert_url display_convert_url subscription_ua
   local validate_ok="false"
   local failure_type process_status preview_file
 
@@ -3561,9 +3608,12 @@ convert_subscription_via_subconverter() {
       convert_url="$LOCAL_SUBSCRIPTION_CONVERT_URL"
       ;;
     *)
-      die "不支持的订阅协议：$url"
+      subscription_scheme_is_share_link "$scheme" \
+        || die "不支持的订阅协议：$url"
       ;;
   esac
+
+  display_convert_url="$(subscription_url_for_display "$convert_url")"
 
   case "$fetch_reason" in
     auto|install|bootstrap|"")
@@ -3627,10 +3677,16 @@ convert_subscription_via_subconverter() {
     if [ "$scheme" = "file" ]; then
       echo "param: url=<local subscription share links>"
     else
-      echo "param: url=$convert_url"
+      echo "param: url=$display_convert_url"
     fi
     echo "not_sent_params: insert/config/emoji/list (use subconverter defaults)"
-    [ -n "${effective_url:-}" ] && echo "effective_url: $effective_url"
+    if [ -n "${effective_url:-}" ]; then
+      if subscription_scheme_is_share_link "$scheme"; then
+        echo "effective_url: <redacted local subconverter request>"
+      else
+        echo "effective_url: $effective_url"
+      fi
+    fi
     echo "curl_rc: $curl_rc"
     echo "http_code: ${http_code:-unknown}"
     echo "process_status: $process_status"
@@ -4067,25 +4123,30 @@ fetch_subscription_source() {
       else
         reason="订阅转换失败"
         if [ "${SUBCONVERTER_LAST_ZERO_NODES:-false}" = "true" ]; then
-          warn "subconverter 未解析到节点，尝试直接使用原始订阅（Clash YAML fallback）"
-
-          rm -f "$raw_file" "$candidate_file" 2>/dev/null || true
-          raw_file="$(mktemp)"
-          candidate_file="$(mktemp)"
-          rm -f "$raw_file" "$candidate_file" 2>/dev/null || true
-
-          if download_subscription_yaml "$url" "$raw_file" "$fetch_reason"; then
-            if build_runtime_candidate_from_payload "$raw_file" "$candidate_file" "$name"; then
-              mv -f "$candidate_file" "$out_file"
-              rm -f "$raw_file" 2>/dev/null || true
-              mark_subscription_health_success "$name"
-              return 0
-            fi
-
-            write_subscription_invalid_debug_snapshot "$raw_file"
-            reason="订阅转换失败：No nodes were found；已尝试原始订阅 fallback，但原始订阅不是可直接运行的 Clash YAML"
+          if subscription_url_is_share_link "$url"; then
+            warn "subconverter 未从分享链接解析到节点"
+            reason="订阅转换失败：No nodes were found；分享链接无法作为 Clash YAML fallback"
           else
-            reason="订阅转换失败：No nodes were found；原始订阅 fallback 下载失败"
+            warn "subconverter 未解析到节点，尝试直接使用原始订阅（Clash YAML fallback）"
+
+            rm -f "$raw_file" "$candidate_file" 2>/dev/null || true
+            raw_file="$(mktemp)"
+            candidate_file="$(mktemp)"
+            rm -f "$raw_file" "$candidate_file" 2>/dev/null || true
+
+            if download_subscription_yaml "$url" "$raw_file" "$fetch_reason"; then
+              if build_runtime_candidate_from_payload "$raw_file" "$candidate_file" "$name"; then
+                mv -f "$candidate_file" "$out_file"
+                rm -f "$raw_file" 2>/dev/null || true
+                mark_subscription_health_success "$name"
+                return 0
+              fi
+
+              write_subscription_invalid_debug_snapshot "$raw_file"
+              reason="订阅转换失败：No nodes were found；已尝试原始订阅 fallback，但原始订阅不是可直接运行的 Clash YAML"
+            else
+              reason="订阅转换失败：No nodes were found；原始订阅 fallback 下载失败"
+            fi
           fi
         fi
       fi
