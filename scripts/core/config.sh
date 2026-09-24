@@ -2611,7 +2611,7 @@ rename_subscription() {
   OLD_NAME="$old_name" NEW_NAME="$new_name" "$(yq_bin)" eval -i '
     .sources[env(NEW_NAME)] = .sources[env(OLD_NAME)] |
     del(.sources[env(OLD_NAME)]) |
-    .active = (if .active == env(OLD_NAME) then env(NEW_NAME) else .active end)
+    with(select(.active == env(OLD_NAME)); .active = env(NEW_NAME))
   ' "$file"
 
   old_prefix="$(health_key_prefix "$old_name")"
