@@ -3657,18 +3657,17 @@ doctor_dependencies() {
 doctor_download_mirrors() {
   doctor_print_title "下载加速配置"
 
-  local custom_prefix pool_source
+  local custom_prefix
   custom_prefix="$(github_proxy_prefix 2>/dev/null || true)"
 
-  if [ -n "${custom_prefix:-}" ]; then
+  if ! github_mirror_enabled; then
+    doctor_ok "GitHub 镜像已禁用，直接访问 GitHub 原站"
+  elif [ -n "${custom_prefix:-}" ]; then
     doctor_ok "自定义镜像（CLASH_GH_PROXY）：${custom_prefix}"
-    pool_source="custom"
   elif [ -n "${CLASH_GH_PROXY_POOL:-}" ]; then
     doctor_ok "自定义镜像池（CLASH_GH_PROXY_POOL）已配置"
-    pool_source="custom-pool"
   else
     doctor_ok "使用内置默认镜像池（gh-proxy.org / ghfast.top / ghproxy.net / kkgithub.com）"
-    pool_source="default"
   fi
 
   # Show mirror history from state file
@@ -3681,8 +3680,13 @@ doctor_download_mirrors() {
     [ -n "${last_fail:-}" ] && doctor_warn "上次失败镜像：${last_fail}"
   fi
 
-  doctor_ok "配置提示：在 .env 中设置 CLASH_GH_PROXY=https://your-mirror.com 可指定自定义加速前缀"
-  doctor_ok "可用镜像列表参考：https://ghproxy.link/"
+  if github_mirror_enabled; then
+    doctor_ok "配置提示：设置 CLASH_GH_PROXY_ENABLED=false 可关闭镜像并直连 GitHub 原站"
+    doctor_ok "配置提示：设置 CLASH_GH_PROXY=https://your-mirror.com 可指定自定义加速前缀"
+    doctor_ok "可用镜像列表参考：https://ghproxy.link/"
+  else
+    doctor_ok "配置提示：设置 CLASH_GH_PROXY_ENABLED=true 可重新启用 GitHub 镜像"
+  fi
 }
 
 doctor_config() {

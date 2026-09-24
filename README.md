@@ -346,6 +346,7 @@ SUBCONVERTER_VERSION=v0.9.9
 MIHOMO_DOWNLOAD_BASE=https://github.com/MetaCubeX/mihomo/releases/download
 CLASH_DOWNLOAD_BASE=https://github.com/WindSpiritSR/clash/releases/download
 CLASH_BUNDLED_ASSET_ENABLED=true
+CLASH_GH_PROXY_ENABLED=true
 CLASH_OFFLINE=false
 CLASH_SHELL_AUTO_RESTORE_PROXY=true
 CLASH_PREDOWNLOAD_GEO=true
@@ -363,6 +364,12 @@ CLASH_IPV6=auto
 
 所有来自 GitHub 的资源（内核、按需 GEO 数据、yq、subconverter、Dashboard）在下载时会自动尝试内置镜像池（`gh-proxy.org`、`ghfast.top`、`ghproxy.net`、`kkgithub.com`），无需额外配置即可加速。
 
+如果当前网络可以稳定直连 GitHub，可在 `.env` 中关闭镜像，只使用 GitHub 原站：
+
+```bash
+CLASH_GH_PROXY_ENABLED=false
+```
+
 如果默认镜像不满足需求，可在 `.env` 中指定自定义加速前缀：
 
 ```bash
@@ -375,6 +382,12 @@ CLASH_GH_PROXY=https://ghfast.top
 
 可用镜像列表参考：<https://ghproxy.link/>  
 当前镜像使用状态可通过 `clash doctor` 查看。
+
+该开关只控制 `bash install.sh`、`clash update`、`clash upgrade` 等脚本下载的 GitHub 资源，不会改变此前用于获取项目代码的 `git clone` 地址。如需从原站克隆，请使用：
+
+```bash
+git clone --branch master --depth 1 https://github.com/wnlen/clash-for-linux.git
+```
 
 ### 内置运行依赖
 

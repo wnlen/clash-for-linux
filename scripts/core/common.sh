@@ -410,6 +410,13 @@ github_proxy_prefix() {
   echo "$prefix"
 }
 
+github_mirror_enabled() {
+  case "${CLASH_GH_PROXY_ENABLED:-true}" in
+    false|0|no|off) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
 bundled_asset_enabled() {
   case "${CLASH_BUNDLED_ASSET_ENABLED:-true}" in
     true|1|yes|on) return 0 ;;
@@ -759,6 +766,11 @@ github_mirror_candidate_entries() {
     echo "origin||origin"
     return 0
   }
+
+  if ! github_mirror_enabled; then
+    echo "origin||origin"
+    return 0
+  fi
 
   if [ -n "$(github_proxy_prefix)" ]; then
     entry="custom|$(github_proxy_prefix)|full"
