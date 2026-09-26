@@ -152,7 +152,10 @@ ensure_runtime_ports_ready() {
     info "检测到 external-controller 冲突：${controller_port} -> ${new_controller_port}"
   fi
 
-  if [ -n "${dns_port:-}" ] && [ "$dns_port" != "null" ] && is_port_in_use "$dns_port"; then
+  if [ "$(config_preserve_dns_listen)" != "true" ] \
+    && [ -n "${dns_port:-}" ] \
+    && [ "$dns_port" != "null" ] \
+    && is_port_in_use "$dns_port"; then
     new_dns_port="$(resolve_free_port 1053 1999)"
     write_env_value "CLASH_DNS_PORT" "$new_dns_port"
     write_runtime_value "INSTALL_PLAN_DNS_PORT" "$new_dns_port"

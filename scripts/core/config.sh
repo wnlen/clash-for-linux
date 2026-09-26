@@ -276,6 +276,10 @@ config_bool_env_value() {
   esac
 }
 
+config_preserve_dns_listen() {
+  config_bool_env_value "CLASH_PRESERVE_DNS_LISTEN" "false"
+}
+
 config_ipv6_mode() {
   local value
 
@@ -842,7 +846,7 @@ normalize_runtime_config() {
   local mixed_port controller tun_enable_value tun_stack_value dns_port_value controller_secret_value
   local tun_auto_route_value tun_auto_redirect_value tun_strict_route_value tun_dns_hijack_value
   local dashboard_dir_value dashboard_url_value allow_lan_value ipv6_mode_value
-  local ipv6_value dns_ipv6_value
+  local ipv6_value dns_ipv6_value dns_listen_value
   local resolved_ports err_file output
 
   [ -s "$file" ] || die "待规范化的配置文件不存在：$file"
@@ -859,6 +863,11 @@ normalize_runtime_config() {
   tun_strict_route_value="$(tun_strict_route)"
   tun_dns_hijack_value="$(tun_dns_hijack)"
   dns_port_value="$CLASH_DNS_PORT_RESOLVED"
+  dns_listen_value="0.0.0.0:${dns_port_value}"
+  if [ "$(config_preserve_dns_listen)" = "true" ]; then
+    dns_listen_value="$(config_dns_listen_value "$file" 2>/dev/null || true)"
+    [ -n "${dns_listen_value:-}" ] || dns_listen_value="0.0.0.0:${dns_port_value}"
+  fi
   controller_secret_value="$(ensure_controller_secret)"
   dashboard_dir_value="$(runtime_dashboard_dir)"
   dashboard_url_value="$DEFAULT_DASHBOARD_UI_URL"
@@ -893,7 +902,7 @@ normalize_runtime_config() {
     controller_secret_value="$controller_secret_value" \
     dashboard_dir_value="$dashboard_dir_value" \
     dashboard_url_value="$dashboard_url_value" \
-    dns_listen_value="0.0.0.0:${dns_port_value}" \
+    dns_listen_value="$dns_listen_value" \
     "$(yq_bin)" eval -i '
       .["mixed-port"] = (env(mixed_port) | tonumber) |
       del(.port, .["socks-port"], .["redir-port"], .["tproxy-port"]) |
@@ -1898,6 +1907,20 @@ is_valid_port_number() {
   [ "$port" -ge 1 ] && [ "$port" -le 65535 ]
 }
 
+config_dns_listen_value() {
+  local file="${1:-}"
+  local listen port
+
+  [ -s "$file" ] || return 1
+  listen="$("$(yq_bin)" eval '.dns.listen // ""' "$file" 2>/dev/null | head -n 1)"
+  [ -n "${listen:-}" ] || return 1
+  [ "$listen" != "null" ] || return 1
+
+  port="${listen##*:}"
+  is_valid_port_number "$port" || return 1
+  printf '%s\n' "$listen"
+}
+
 csv_has_value() {
   local csv="$1"
   local value="$2"
@@ -2099,7 +2122,7 @@ load_resolved_runtime_ports() {
 resolve_runtime_ports() {
   # Optional: path to a config file to read port from when MIXED_PORT is not set
   local _hint_config_file="${1:-}"
-  local preferred_mixed preferred_controller preferred_dns
+  local preferred_mixed preferred_controller preferred_dns preserved_dns_listen
   local controller_host preferred_controller_port
   local mixed_port controller_port dns_port
   local used_ports=""
@@ -2116,6 +2139,16 @@ resolve_runtime_ports() {
   preferred_mixed="${preferred_mixed:-7890}"
   preferred_controller="${EXTERNAL_CONTROLLER:-0.0.0.0:9090}"
   preferred_dns="${CLASH_DNS_PORT:-1053}"
+  preserved_dns_listen=""
+
+  if [ "$(config_preserve_dns_listen)" = "true" ] \
+    && [ -n "${_hint_config_file:-}" ] \
+    && [ -s "${_hint_config_file:-}" ]; then
+    preserved_dns_listen="$(config_dns_listen_value "$_hint_config_file" 2>/dev/null || true)"
+    if [ -n "${preserved_dns_listen:-}" ]; then
+      preferred_dns="${preserved_dns_listen##*:}"
+    fi
+  fi
 
   is_valid_port_number "$preferred_mixed" || die "MIXED_PORT 不合法：$preferred_mixed"
   is_valid_port_number "$preferred_dns" || die "CLASH_DNS_PORT 不合法：$preferred_dns"
@@ -2131,7 +2164,19 @@ resolve_runtime_ports() {
   is_valid_port_number "$controller_port" || die "invalid external-controller resolution: $controller_port"
   used_ports="$(csv_append_value "$used_ports" "$controller_port")"
 
-  dns_port="$(resolve_runtime_port "$preferred_dns" 1053 1199 "$used_ports" "dns.listen")"
+  if [ -n "${preserved_dns_listen:-}" ]; then
+    if csv_has_value "$used_ports" "$preferred_dns"; then
+      die "订阅保留的 DNS 端口与其他运行端口冲突：$preferred_dns"
+    fi
+
+    if is_port_in_use "$preferred_dns" && ! port_reserved_by_current_runtime "$preferred_dns"; then
+      die "订阅保留的 DNS 端口已被占用：$preferred_dns"
+    fi
+
+    dns_port="$preferred_dns"
+  else
+    dns_port="$(resolve_runtime_port "$preferred_dns" 1053 1199 "$used_ports" "dns.listen")"
+  fi
   is_valid_port_number "$dns_port" || die "invalid dns.listen resolution: $dns_port"
   used_ports="$(csv_append_value "$used_ports" "$dns_port")"
 
