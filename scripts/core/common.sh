@@ -314,10 +314,17 @@ ensure_project_not_wsl_windows_mount() {
 }
 
 load_env_if_exists() {
-  if [ -f "$PROJECT_DIR/.env" ]; then
+  local env_file="$PROJECT_DIR/.env"
+
+  # Use the tracked template as read-only defaults. User-specific values stay in .env.
+  if [ ! -f "$env_file" ] && [ -f "$PROJECT_DIR/.env.example" ]; then
+    env_file="$PROJECT_DIR/.env.example"
+  fi
+
+  if [ -f "$env_file" ]; then
     set -a
     # shellcheck disable=SC1090
-    source "$PROJECT_DIR/.env"
+    source "$env_file"
     set +a
   fi
 
