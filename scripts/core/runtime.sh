@@ -611,17 +611,9 @@ tun_public_ip_without_proxy_env() {
     fi
   fi
 
-  env \
-    -u http_proxy \
-    -u https_proxy \
-    -u HTTP_PROXY \
-    -u HTTPS_PROXY \
-    -u all_proxy \
-    -u ALL_PROXY \
-    curl -fsSL --connect-timeout 3 --max-time 6 https://ip.sb 2>/dev/null \
-    | head -n 1 \
-    | tr -d '\r' \
-    | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+  # An unbound probe follows the current route, which Tun may already capture,
+  # so it would report the proxy exit as the host IP. Report unavailable instead.
+  return 1
 }
 
 tun_public_ip_with_current_route() {

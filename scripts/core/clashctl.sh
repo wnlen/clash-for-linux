@@ -6089,14 +6089,42 @@ tun_policy_rule_line() {
 }
 
 tun_policy_route_line() {
+  local routes line
+
   has_ip_command 2>/dev/null || return 1
-  ip route show table all 2>/dev/null \
-    | grep -E '(^|[[:space:]])default .* dev (Meta|tun|utun|mihomo|clash)([[:space:]].*)? table 2022|table 2022 .*default .* dev (Meta|tun|utun|mihomo|clash)' \
+  routes="$(ip route show table all 2>/dev/null || true)"
+
+  line="$(
+    printf '%s\n' "$routes" \
+      | grep -E '(^|[[:space:]])default .* dev (Meta|tun|utun|mihomo|clash)([[:space:]].*)? table 2022|table 2022 .*default .* dev (Meta|tun|utun|mihomo|clash)' \
+      | head -n 1 || true
+  )"
+
+  # route-exclude-address makes mihomo split the default route into prefixes,
+  # so table 2022 may hold only non-default routes via the Tun device.
+  if [ -z "${line:-}" ]; then
+    line="$(
+      printf '%s\n' "$routes" \
+        | grep -E 'dev (Meta|tun|utun|mihomo|clash)([[:space:]].*)? table 2022([[:space:]]|$)|table 2022 .*dev (Meta|tun|utun|mihomo|clash)([[:space:]]|$)' \
+        | head -n 1 || true
+    )"
+  fi
+
+  [ -n "${line:-}" ] || return 1
+  printf '%s\n' "$line"
+}
+
+# The adapter log line is info level, so it is missing when log-level is
+# warning or above; an up Tun link is equivalent evidence.
+tun_link_adapter_line() {
+  has_ip_command 2>/dev/null || return 1
+  ip -o link show up 2>/dev/null \
+    | grep -E '^[0-9]+:[[:space:]]+(Meta|tun|utun|mihomo|clash)[:@]' \
     | head -n 1
 }
 
 tun_has_policy_routing_evidence() {
-  tun_log_tun_adapter_line >/dev/null 2>&1 || return 1
+  tun_log_tun_adapter_line >/dev/null 2>&1 || tun_link_adapter_line >/dev/null 2>&1 || return 1
   tun_policy_rule_line >/dev/null 2>&1 || return 1
   tun_policy_route_line >/dev/null 2>&1 || return 1
 }
@@ -6141,10 +6169,17 @@ tun_doctor_log_evidence() {
 }
 
 tun_doctor_policy_evidence() {
-  local rule_line route_line
+  local link_line rule_line route_line
 
+  link_line="$(tun_link_adapter_line 2>/dev/null || true)"
   rule_line="$(tun_policy_rule_line 2>/dev/null || true)"
   route_line="$(tun_policy_route_line 2>/dev/null || true)"
+
+  if [ -n "${link_line:-}" ]; then
+    echo "  🐱 Tun 网卡：$link_line"
+  else
+    echo "  🚨 Tun 网卡：未发现处于 UP 状态的 Meta/tun 设备"
+  fi
 
   if [ -n "${rule_line:-}" ]; then
     echo "  🐱 Tun policy rule：$rule_line"
@@ -6155,7 +6190,7 @@ tun_doctor_policy_evidence() {
   if [ -n "${route_line:-}" ]; then
     echo "  🐱 Tun policy route：$route_line"
   else
-    echo "  🚨 Tun policy route：未发现 table 2022 默认路由指向 Meta/tun 设备"
+    echo "  🚨 Tun policy route：未发现 table 2022 中指向 Meta/tun 设备的路由"
   fi
 }
 
