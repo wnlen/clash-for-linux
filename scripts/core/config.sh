@@ -1266,9 +1266,9 @@ print_subscription_health_verbose() {
   while IFS= read -r name; do
     [ -n "${name:-}" ] || continue
 
-    enabled="$("$(yq_bin)" eval ".sources.${name}.enabled // false" "$file" 2>/dev/null)"
-    fmt="$("$(yq_bin)" eval ".sources.${name}.type // \"clash\"" "$file" 2>/dev/null)"
-    url="$("$(yq_bin)" eval ".sources.${name}.url // \"\"" "$file" 2>/dev/null)"
+    enabled="$(NAME="$name" "$(yq_bin)" eval '.sources[env(NAME)].enabled // false' "$file" 2>/dev/null)"
+    fmt="$(NAME="$name" "$(yq_bin)" eval '.sources[env(NAME)].type // "clash"' "$file" 2>/dev/null)"
+    url="$(NAME="$name" "$(yq_bin)" eval '.sources[env(NAME)].url // ""' "$file" 2>/dev/null)"
 
     if [ "$name" = "$active" ]; then
       echo "* $name"
@@ -1810,7 +1810,7 @@ subscription_url() {
   ensure_subscriptions_file
 
   active="$(active_subscription_name)"
-  "$(yq_bin)" eval ".sources.${active}.url // \"\"" "$file" 2>/dev/null | head -n 1
+  ACTIVE="$active" "$(yq_bin)" eval '.sources[env(ACTIVE)].url // ""' "$file" 2>/dev/null | head -n 1
 }
 
 subscription_format() {
@@ -1819,7 +1819,7 @@ subscription_format() {
   ensure_subscriptions_file
 
   active="$(active_subscription_name)"
-  "$(yq_bin)" eval ".sources.${active}.type // \"clash\"" "$file" 2>/dev/null | head -n 1
+  ACTIVE="$active" "$(yq_bin)" eval '.sources[env(ACTIVE)].type // "clash"' "$file" 2>/dev/null | head -n 1
 }
 
 subscription_exists() {
@@ -1837,7 +1837,7 @@ subscription_enabled() {
   file="$(subscriptions_file)"
   ensure_subscriptions_file
 
-  [ "$("$(yq_bin)" eval ".sources.${name}.enabled // false" "$file" 2>/dev/null)" = "true" ]
+  [ "$(NAME="$name" "$(yq_bin)" eval '.sources[env(NAME)].enabled // false' "$file" 2>/dev/null)" = "true" ]
 }
 
 subscription_auto_disabled() {
@@ -1879,7 +1879,7 @@ subscription_url_by_name() {
   file="$(subscriptions_file)"
   ensure_subscriptions_file
 
-  "$(yq_bin)" eval ".sources.${name}.url // \"\"" "$file" 2>/dev/null | head -n 1
+  NAME="$name" "$(yq_bin)" eval '.sources[env(NAME)].url // ""' "$file" 2>/dev/null | head -n 1
 }
 
 subscription_format_by_name() {
@@ -1888,7 +1888,7 @@ subscription_format_by_name() {
   file="$(subscriptions_file)"
   ensure_subscriptions_file
 
-  "$(yq_bin)" eval ".sources.${name}.type // \"clash\"" "$file" 2>/dev/null | head -n 1
+  NAME="$name" "$(yq_bin)" eval '.sources[env(NAME)].type // "clash"' "$file" 2>/dev/null | head -n 1
 }
 
 is_valid_port_number() {
